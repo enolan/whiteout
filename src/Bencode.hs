@@ -1,19 +1,18 @@
 -- |Reading and writing bencoded values.
 module Bencode (
-    BValue(..),
-    decode,
-    encode
+    BValue(..)
     ) where
 
 import Data.Binary (Binary(..))
-import Data.Binary.Get (Get(), getLazyByteString, lookAhead, runGet)
+import Data.Binary.Get (Get(), getLazyByteString, lookAhead, skip)
+import Data.Binary.Put (Put(), putLazyByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (digitToInt, isDigit)
 import Data.Int (Int64)
 import qualified Data.Map as M
 import Data.Map (Map)
-import Data.Word (Word8)
+import qualified Text.Show.ByteString as SBS
 
 -- |The type of bencoded values.
 data BValue =
@@ -23,9 +22,13 @@ data BValue =
   | BList [BValue]
     deriving (Eq, Show)
 
--- |Decode a ByteString to a BValue
-decode :: ByteString -> BValue
-decode = runGet getBValue
+instance Binary BValue where
+    put = putBValue
+    get = getBValue
+
+---------------------------------------
+--Getting
+---------------------------------------
 
 getBValue :: Get BValue
 getBValue = do
@@ -36,6 +39,7 @@ getBValue = do
             | c == 'i' -> fmap BInt getInt
             | c == 'd' -> fmap BDict getDict
             | c == 'l' -> fmap BList getList
+        _ -> error "invalid bencoding"
 
 -- |Read a string with an accumulating parameter for the length.
 getBString :: Int64 -> Get ByteString
@@ -55,12 +59,54 @@ getInt' i = do
         else getInt' (i*10+(decToInt next))
 
 getDict :: Get (Map ByteString BValue)
-getDict = undefined
+getDict = getDict' []
+
+getDict' :: [(ByteString, BValue)] -> Get (Map ByteString BValue)
+getDict' acc = do
+    next <- get
+    if next == 'e'
+        then let ret = M.fromAscList $ reverse acc in
+            if M.valid ret
+                then return ret
+                else error
+                    "dictionary in wrong order or multiple values for a key"
+        else do
+            key <- getBString $ decToInt next
+            val <- get
+            getDict' $ (key,val):acc
 
 getList :: Get [BValue]
-getList = undefined
+getList = getList' []
 
-encode = undefined
+getList' :: [BValue] -> Get [BValue]
+getList' acc = do
+    next <- lookAhead get
+    if next == 'e'
+        then skip 1 >> return (reverse acc)
+        else getList' . (: acc) =<< get
+
+---------------------------------------
+--Putting
+---------------------------------------
+
+putBValue :: BValue -> Put
+putBValue (BString s) = do
+    SBS.showp (BS.length s)
+    put ':'
+    putLazyByteString s
+putBValue (BInt i) = do
+    put 'i'
+    SBS.showp i
+    put 'e'
+putBValue (BDict d) = do
+    put 'd'
+    putBDict $ M.toAscList d
+    put 'e'
+putBValue (BList bs) = put 'l' >> mapM_ putBValue bs >> put 'e'
+
+putBDict :: [(ByteString, BValue)] -> Put
+putBDict = mapM_
+    (\(k,v) -> (putBValue $ BString k) >> putBValue v)
 
 -- UTILITIES
 
