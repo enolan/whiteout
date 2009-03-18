@@ -27,7 +27,7 @@ instance Binary BValue where
     get = getBValue
 
 ---------------------------------------
---Getting
+-- Getting
 ---------------------------------------
 
 getBValue :: Get BValue
@@ -41,7 +41,6 @@ getBValue = do
             | c == 'l' -> fmap BList getList
         _ -> error "invalid bencoding"
 
--- |Read a string with an accumulating parameter for the length.
 getBString :: Int64 -> Get ByteString
 getBString i = do
     next <- get
@@ -86,7 +85,7 @@ getList' acc = do
         else getList' . (: acc) =<< get
 
 ---------------------------------------
---Putting
+-- Putting
 ---------------------------------------
 
 putBValue :: BValue -> Put
@@ -108,7 +107,9 @@ putBDict :: [(ByteString, BValue)] -> Put
 putBDict = mapM_
     (\(k,v) -> (putBValue $ BString k) >> putBValue v)
 
--- UTILITIES
+---------------------------------------
+-- Utilities
+---------------------------------------
 
 -- Data.Char.digitToInt accepts hex digits too for some reason.
 decToInt :: Num a => Char -> a
