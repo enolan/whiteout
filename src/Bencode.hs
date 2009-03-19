@@ -114,4 +114,4 @@ putBDict = mapM_
 -- Data.Char.digitToInt accepts hex digits too for some reason.
 decToInt :: Num a => Char -> a
 decToInt c = if isDigit c then fromIntegral $ digitToInt c else error msg
-    where msg = "tried to convert" ++ c : " to a int, but isn't a digit."
+    where msg = "tried to convert '" ++ c : "' to a int, but isn't a digit."
