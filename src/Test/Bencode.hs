@@ -1,4 +1,4 @@
-module Test.BencodeT where
+module Test.Bencode where
 
 import Data.Binary (decode, encode)
 import Data.ByteString.Lazy (ByteString)
@@ -12,15 +12,16 @@ import Bencode
 
 instance Arbitrary BValue where
     arbitrary = frequency [
-        (1, fmap BString arbitrary),
-        (1, fmap BInt arbitrary),
-        (2, fmap BDict arbitrary),
-        (2, fmap BList arbitrary)]
+        (20, fmap BString arbitrary),
+        (20, fmap BInt arbitrary),
+        (1, fmap BDict arbitrary),
+        (1, fmap BList arbitrary)]
 
-    shrink (BString s) = map BString $ shrink s
+{-    shrink (BString s) = map BString $ shrink s
     shrink (BInt i)    = map BInt $ shrink i
     shrink (BDict d)   = map BDict $ shrink d
     shrink (BList l)   = map BList $ shrink l
+-}
 
 instance Arbitrary ByteString where
     arbitrary = fmap LBS.pack arbitrary

@@ -49,7 +49,11 @@ getBString i = do
         else getBString $ i*10+(decToInt next)
 
 getInt :: Get Integer
-getInt = get >>= getInt' . decToInt
+getInt = do
+    c <- lookAhead get
+    if c == '-'
+        then (skip 1) >> (fmap negate $ getInt' 0)
+        else getInt' 0
 getInt' :: Integer -> Get Integer
 getInt' i = do
     next <- get
