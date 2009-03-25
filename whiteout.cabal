@@ -1,0 +1,18 @@
+Name:              whiteout
+Version:           0.1
+Cabal-Version:     >= 1.2
+License:           BSD3
+License-File:      COPYING
+Author:            Echo Nolan <echo@echonolan.net>
+Homepage:          http://github.com/enolan/whiteout
+Category:          Network
+Synopsis:          A BitTorrent library.
+Build-Type:        Simple
+
+Library
+    Build-depends:     base ==4.*, bytestring, containers, parsec == 2.*,
+                       QuickCheck == 2.*
+    Exposed-modules:   Network.Whiteout
+    Other-modules:     Internal.BEncode, Internal.BEncode.Lexer, Test.BEncode
+    Hs-source-dirs:    src
+    Ghc-options:       -O -Wall
