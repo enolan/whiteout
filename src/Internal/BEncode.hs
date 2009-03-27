@@ -9,12 +9,12 @@ module Internal.BEncode
   )
 where
 
-import qualified Data.Map as Map
-import Data.Map (Map)
-import Text.ParserCombinators.Parsec
-import qualified Data.ByteString.Lazy.Char8 as L
-import qualified Data.ByteString.Char8 as BS
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as L
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Text.ParserCombinators.Parsec
 
 import Internal.BEncode.Lexer ( Token (..), lexer )
 

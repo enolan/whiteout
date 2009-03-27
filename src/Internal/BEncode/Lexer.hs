@@ -1,10 +1,9 @@
 module Internal.BEncode.Lexer where
 
 import Data.Char
-
-import qualified Data.ByteString.Lazy.Char8 as L
-import qualified Data.ByteString.Char8 as BS
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as L
 
 data Token
     = TDict
@@ -39,4 +38,3 @@ lexer fs
           | otherwise -> Nothing
     where ch = L.head fs
           rest = L.tail fs
-
