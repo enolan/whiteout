@@ -4,17 +4,19 @@ module Internal.BEncode
    BEncode(..),  
    -- * Functions
    bRead,
-   bShow,
    bPack
   )
 where
 
+import Data.Binary (Binary(..), Put)
+import Data.Binary.Put (putByteString, runPut)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.ParserCombinators.Parsec
+import qualified Text.Show.ByteString as SBS
 
 import Internal.BEncode.Lexer ( Token (..), lexer )
 
@@ -27,7 +29,7 @@ type BParser a = GenParser Token () a
 data BEncode = BInt Integer
 	     | BString ByteString
 	     | BList [BEncode]
-             | BDict (Map String BEncode)
+             | BDict (Map ByteString BEncode)
 	       deriving (Eq, Ord, Show)
 
 -- Source possition is pretty useless in BEncoded data. FIXME
@@ -73,7 +75,7 @@ bDict = withToken TDict $ fmap (BDict . Map.fromAscList) (many bAssocList)
     where bAssocList
               = do str <- tstring
                    value <- bParse
-                   return (BS.unpack str,value)
+                   return (str,value)
 
 bParse :: BParser BEncode
 bParse = bDict <|> bList <|> bString <|> bInt
@@ -88,34 +90,15 @@ bRead str = case lexer str of
 	     Left _err -> Nothing
 	     Right b   -> Just b
 
--- | Render a BEncode structure to a B-coded string
-bShow :: BEncode -> ShowS
-bShow be = bShow' be
-  where
-    sc = showChar
-    ss = showString
-    sKV (k,v) = sString k (length k) . bShow' v
-    sDict dict = foldr (.) id (map sKV (Map.toAscList dict)) 
-    sList list = foldr (.) id (map bShow' list)
-    sString str len = shows len . sc ':' . ss str
-    bShow' b =
-      case b of
-        BInt i    -> sc 'i' . shows i . sc 'e'
-        BString s -> sString (BS.unpack s) (BS.length s)
-        BList bl  -> sc 'l' . sList bl . sc 'e'
-        BDict bd  -> sc 'd' . sDict bd . sc 'e'
-
 bPack :: BEncode -> L.ByteString
-bPack be = L.fromChunks (bPack' be [])
-    where intTag = BS.pack "i"
-          colonTag = BS.pack ":"
-          endTag = BS.pack "e"
-          listTag = BS.pack "l"
-          dictTag = BS.pack "d"
-          sString :: ByteString -> [ByteString] -> [ByteString]
-          sString s r = BS.pack (show (BS.length s)) : colonTag : s : r
-          bPack' :: BEncode -> [ByteString] -> [ByteString]
-          bPack' (BInt i) r = intTag : BS.pack (show i) : endTag : r
-          bPack' (BString s) r = sString s r
-          bPack' (BList bl) r = listTag : foldr bPack' (endTag : r) bl
-          bPack' (BDict bd) r = dictTag : foldr (\(k,v) -> sString (BS.pack k) . bPack' v) (endTag : r) (Map.toAscList bd)
+bPack = runPut . bPut
+
+bPut :: BEncode -> Put
+bPut (BInt i)    = put 'i' >> SBS.showp i >> put 'e'
+bPut (BString s) = SBS.showp (BS.length s) >> put ':' >> putByteString s
+bPut (BList l)   = put 'l' >> mapM_ bPut l >> put 'e'
+bPut (BDict d)   = put 'd' >>
+                   mapM_ 
+                     (\(k,v) -> bPut (BString k) >> bPut v)
+                     (Map.toList d) >>
+                   put 'e'

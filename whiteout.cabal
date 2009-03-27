@@ -10,7 +10,8 @@ Synopsis:          A BitTorrent library.
 Build-Type:        Simple
 
 Library
-    Build-depends:     base ==4.*, bytestring, containers, parsec == 2.*
+    Build-depends:     base ==4.*, binary, bytestring, bytestring-show,
+                       containers, parsec == 2.*
     Exposed-modules:   Network.Whiteout
     Other-modules:     Internal.BEncode, Internal.BEncode.Lexer
     Hs-source-dirs:    src
