@@ -11,32 +11,32 @@ data Token
     | TList
     | TInt
     | TString ByteString
-    | TNumber Int
+    | TNumber Integer
     | TEnd
       deriving (Show,Eq)
 
 
-lexer :: L.ByteString -> [Token]
-lexer fs | L.null fs = []
+lexer :: L.ByteString -> Maybe [Token]
+lexer fs | L.null fs = Just []
 lexer fs
     = case ch of
-        'd' -> TDict : lexer rest
-        'l' -> TList : lexer rest
-        'i' -> TInt  : lexer rest
-        'e' -> TEnd  : lexer rest
+        'd' -> fmap (TDict :) (lexer rest)
+        'l' -> fmap (TList :) (lexer rest)
+        'i' -> fmap (TInt  :) (lexer rest)
+        'e' -> fmap (TEnd  :) (lexer rest)
         '-' -> let (digits,rest') = L.span isDigit rest
                    number = read (L.unpack digits)
-               in TNumber (-number) : lexer rest'
+               in fmap (TNumber (-number) :) (lexer rest')
         _ | isDigit ch
               -> let (digits,rest') = L.span isDigit fs
                      number = read (L.unpack digits)
                  in if L.null rest'
-                       then [TNumber number]
+                       then Just [TNumber number]
                        else case L.head rest' of
                               ':' -> let (str, rest'') = L.splitAt (fromIntegral number) (L.tail rest')
-                                     in TString (BS.concat $ L.toChunks str) : lexer rest''
-                              _ -> TNumber number : lexer rest'
-          | otherwise -> error "Lexer error."
+                                     in fmap (TString (BS.concat $ L.toChunks str) :) (lexer rest'')
+                              _ -> fmap (TNumber number :) (lexer rest')
+          | otherwise -> Nothing
     where ch = L.head fs
           rest = L.tail fs
 

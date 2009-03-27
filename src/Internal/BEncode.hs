@@ -24,7 +24,7 @@ type BParser a = GenParser Token () a
 {- | The B-coding defines an abstract syntax tree given as a simple
      data type here
 -}
-data BEncode = BInt Int
+data BEncode = BInt Integer
 	     | BString ByteString
 	     | BList [BEncode]
              | BDict (Map String BEncode)
@@ -42,7 +42,7 @@ bToken t = tokenPrim show updatePos fn
 token' :: (Token -> Maybe a) -> BParser a
 token' = tokenPrim show updatePos
 
-tnumber :: BParser Int
+tnumber :: BParser Integer
 tnumber = token' fn
     where fn (TNumber i) = Just i
           fn _ = Nothing
@@ -82,7 +82,9 @@ bParse = bDict <|> bList <|> bString <|> bInt
      and attempts a parse of it into a BEncode data type
 -}
 bRead :: L.ByteString -> Maybe BEncode
-bRead str = case parse bParse "" (lexer str) of
+bRead str = case lexer str of
+    Nothing -> Nothing
+    Just x -> case parse bParse "" x of
 	     Left _err -> Nothing
 	     Right b   -> Just b
 
@@ -110,7 +112,9 @@ bPack be = L.fromChunks (bPack' be [])
           endTag = BS.pack "e"
           listTag = BS.pack "l"
           dictTag = BS.pack "d"
+          sString :: ByteString -> [ByteString] -> [ByteString]
           sString s r = BS.pack (show (BS.length s)) : colonTag : s : r
+          bPack' :: BEncode -> [ByteString] -> [ByteString]
           bPack' (BInt i) r = intTag : BS.pack (show i) : endTag : r
           bPack' (BString s) r = sString s r
           bPack' (BList bl) r = listTag : foldr bPack' (endTag : r) bl
