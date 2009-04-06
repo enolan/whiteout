@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Test.Internal.BEncode where
+module Test.Internal.BEncode (checkPack, checkReadPack) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
