@@ -1,6 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Test.Internal.BEncode (checkPack, checkReadPack) where
+module Test.Internal.BEncode
+    (
+    checkPack,
+    checkReadPack,
+    ) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -41,8 +45,8 @@ instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Map k v) where
     arbitrary = fmap M.fromList arbitrary
     shrink m = map M.fromList $ shrink $ M.toList m
 
-checkReadPack :: BEncode -> Bool
-checkReadPack x = (bRead $ bPack x) == (Just x)
-
 checkPack :: BEncode -> Bool
 checkPack x = (B.concat $ L.toChunks $ bPack x) `seq` True
+
+checkReadPack :: BEncode -> Bool
+checkReadPack x = (bRead $ bPack x) == (Just x)

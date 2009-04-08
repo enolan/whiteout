@@ -87,8 +87,17 @@ bRead :: L.ByteString -> Maybe BEncode
 bRead str = case lexer str of
     Nothing -> Nothing
     Just x -> case parse bParse "" x of
-	     Left _err -> Nothing
-	     Right b   -> Just b
+        Left _err -> Nothing
+        Right b   -> if checkDictsValid b then Just b else Nothing
+
+-- | Sanity check. Make sure we were given bencoded dictionaries in proper
+--   order.
+checkDictsValid :: BEncode -> Bool
+checkDictsValid (BInt _)    = True
+checkDictsValid (BString _) = True
+checkDictsValid (BList xs)  = and $ map checkDictsValid xs
+checkDictsValid (BDict d)   = (Map.valid d) &&
+                              (and $ map checkDictsValid $ Map.elems d)
 
 bPack :: BEncode -> L.ByteString
 bPack = runPut . bPut
