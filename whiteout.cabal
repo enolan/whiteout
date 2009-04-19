@@ -16,5 +16,5 @@ Library
     Exposed-modules:   Network.Whiteout
     Other-modules:     Internal.BEncode, Internal.BEncode.Lexer
     Hs-source-dirs:    src
-    Ghc-options:       -O -Wall -fno-warn-name-shadowing
+    Ghc-options:       -Wall -fno-warn-name-shadowing
     Extensions:        OverloadedStrings
