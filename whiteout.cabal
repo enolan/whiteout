@@ -11,7 +11,8 @@ Build-Type:        Simple
 
 Library
     Build-depends:     array, base ==4.*, binary, bytestring, bytestring-show,
-                       containers, Crypto == 4.*, filepath == 1.*, parsec == 2.*
+                       containers, Crypto == 4.*, filepath == 1.*,
+                       HTTP == 4000.*, network == 2.*, parsec == 2.*
     Exposed-modules:   Network.Whiteout
     Other-modules:     Internal.BEncode, Internal.BEncode.Lexer
     Hs-source-dirs:    src

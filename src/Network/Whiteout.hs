@@ -1,6 +1,9 @@
 module Network.Whiteout
     (
     Torrent(..),
+    loadTorrentFromFile,
+    loadTorrentFromURL,
+    LoadTorrentFromURLError(..),
     loadTorrent
     ) where
 
@@ -12,6 +15,9 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
 import Data.Digest.SHA1 (Word160(..), hash)
 import qualified Data.Map as M
+import Network.URI (parseURI)
+import Network.HTTP
+    (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
 import System.FilePath (joinPath)
 
 import Internal.BEncode
@@ -34,9 +40,42 @@ data Torrent = Torrent {
     infohash :: Word160
     } deriving (Show)
 
--- |Load a torrent from a file.
-loadTorrent :: FilePath -> IO (Maybe Torrent)
-loadTorrent f = fmap (\x -> bRead x >>= toTorrent) $ LBS.readFile f
+-- |Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
+--  valid torrent.
+loadTorrentFromFile :: FilePath -> IO (Maybe Torrent)
+loadTorrentFromFile f = fmap loadTorrent $ LBS.readFile f
+
+-- |Load a torrent from a URL.
+loadTorrentFromURL ::
+    String ->
+    IO (Either LoadTorrentFromURLError Torrent)
+loadTorrentFromURL u = do
+    let uri = parseURI u
+    case uri of
+        Just uri' -> do
+            let req = mkRequest GET uri'
+            res <- simpleHTTP req
+            case res of
+                Left _  -> return $ Left DownloadFailed
+                Right r -> return $ case loadTorrent $ rspBody r of
+                    Just t  -> Right t
+                    Nothing -> Left NotATorrent
+        Nothing   -> return $ Left URLInvalid
+
+-- |Things that could go wrong downloading and loading a torrent.
+data LoadTorrentFromURLError =
+    -- |Download failed.
+      DownloadFailed
+    -- |URL was invalid.
+    | URLInvalid
+    -- |Download succeeded, but what we got was not a torrent.
+    | NotATorrent
+    deriving (Show, Eq)
+
+-- |Load a torrent from a 'LBS.ByteString'. Returns 'Nothing' if the parameter
+--  is not a valid torrent.
+loadTorrent :: LBS.ByteString -> Maybe Torrent
+loadTorrent bs = bRead bs >>= toTorrent
 
 toTorrent :: BEncode -> Maybe Torrent
 toTorrent benc = do
