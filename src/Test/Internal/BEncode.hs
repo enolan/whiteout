@@ -3,7 +3,7 @@
 module Test.Internal.BEncode
     (
     checkPack,
-    checkReadPack,
+    checkReadPack
     ) where
 
 import qualified Data.ByteString as B
