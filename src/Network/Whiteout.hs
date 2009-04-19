@@ -1,7 +1,6 @@
 module Network.Whiteout
     (
-    Torrent(),
---    TorrentInfo(..),
+    Torrent(..),
     loadTorrent
     ) where
 
