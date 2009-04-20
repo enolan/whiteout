@@ -41,7 +41,7 @@ data Torrent = Torrent {
     } deriving (Show)
 
 -- |Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
---  valid torrent.
+--  valid torrent. Throws an exception if the file can't be opened.
 loadTorrentFromFile :: FilePath -> IO (Maybe Torrent)
 loadTorrentFromFile f = fmap loadTorrent $ LBS.readFile f
 
