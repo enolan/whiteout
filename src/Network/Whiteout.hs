@@ -127,7 +127,7 @@ toTorrent benc = do
                      (pack4w8inw32 w13 w14 w15 w16)
                      (pack4w8inw32 w17 w18 w19 w20)) : group20s ws
         group20s [] = []
-        group20s _  = error "group20s called with length whose length % 20 /= 0"
+        group20s _  = error "group20s called with length % 20 /= 0"
         pack4w8inw32 w1 w2 w3 w4 = let
             w1' = shift (fromIntegral w1) 24
             w2' = shift (fromIntegral w2) 16
