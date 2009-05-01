@@ -9,12 +9,32 @@ Category:          Network
 Synopsis:          A BitTorrent library.
 Build-Type:        Simple
 
+Flag Test
+    Description:        Build the testsuite, i.e. runTests
+    Default:            False
+
 Library
-    Build-depends:     array, base ==4.*, binary, bytestring, bytestring-show,
-                       containers, Crypto == 4.*, filepath == 1.*,
-                       HTTP == 4000.*, network == 2.*, parsec == 2.*
-    Exposed-modules:   Network.Whiteout
-    Other-modules:     Internal.BEncode, Internal.BEncode.Lexer
-    Hs-source-dirs:    src
-    Ghc-options:       -Wall -fno-warn-name-shadowing
-    Extensions:        OverloadedStrings
+    Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
+                        containers, Crypto == 4.*, filepath == 1.*,
+                        HTTP == 4000.*, network == 2.*, parsec == 2.*
+    Exposed-modules:    Network.Whiteout
+    Other-modules:      Internal.BEncode, Internal.BEncode.Lexer
+    Hs-source-dirs:     src
+    Ghc-options:        -Wall -fno-warn-name-shadowing
+    Extensions:         OverloadedStrings
+
+Executable runTests
+    if flag(test)
+        Buildable:          True
+    else
+        Buildable:          False
+    Main-is:            Test/runTests.hs
+    Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
+                        containers, Crypto == 4.*, filepath == 1.*,
+                        HTTP == 4000.*, network == 2.*, parsec == 2.*,
+                        QuickCheck == 2.*, test-framework,
+                        test-framework-quickcheck2
+    Other-modules:      Test.Internal.BEncode, Internal.BEncode,
+                        Internal.BEncode.Lexer
+    Hs-source-dirs:     src
+    Ghc-options:        -Wall -fno-warn-name-shadowing
