@@ -1,10 +1,16 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Network.Whiteout
     (
+-- *Torrents
     Torrent(..),
     loadTorrentFromFile,
     loadTorrentFromURL,
     LoadTorrentFromURLError(..),
-    loadTorrent
+    loadTorrent,
+-- *Whiteout state
+    Session(),
+    initialize,
+    addTorrent
     ) where
 
 import Data.Array.IArray (Array, bounds, listArray)
@@ -15,10 +21,14 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
 import Data.Digest.SHA1 (Word160(..), hash)
 import qualified Data.Map as M
+import Control.Concurrent.STM
 import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
-import System.FilePath (joinPath)
+import System.Directory
+    (Permissions(..), doesDirectoryExist, doesFileExist, getPermissions)
+import System.FilePath ((</>), joinPath)
+import System.IO
 
 import Internal.BEncode
 
@@ -158,3 +168,76 @@ toTorrent benc = do
             in if numPieces == numPieces'
                 then Just t
                 else Nothing
+
+-- |A Whiteout session. This is used for keeping track of currently open
+--  torrents.
+data Session = Session {
+    -- |Map from infohashes to torrents.
+    torrents :: TVar (M.Map Word160 TorrentSt)
+    }
+
+-- This should be done in Data.Digest.SHA1, but isn't for whatever reason.
+-- We need it for the above Map.
+deriving instance Ord Word160
+
+-- |The state of a torrent.
+data TorrentSt = TorrentSt {
+    torrent :: Torrent,
+    path :: FilePath
+    }
+    deriving Show
+
+-- This should eventually take more arguments. At least a port to listen on.
+initialize :: IO Session
+initialize = atomically $ do
+    torrents <- newTVar M.empty
+    return $ Session { torrents = torrents }
+
+-- |Add a torrent to a running session for seeding/checking. Since we only
+--  support seeding at present, this requires the files be in place and of the
+--  correct size. Returns 'True' on success.
+addTorrent :: Session -> Torrent -> FilePath -> IO Bool
+addTorrent sess tor path = case files tor of
+    Left len -> do
+        ok <- checkFile (len,path)
+        if ok
+            then (atomically addTorrent') >> return True
+            else return False
+    Right fs -> do
+        e <- doesDirectoryExist path
+        if e
+            then do
+                p <- getPermissions path
+                if readable p
+                    then do
+                        ok <- fmap and $ mapM checkFile $ map addprefix fs
+                        if ok
+                            then (atomically addTorrent') >> return True
+                            else return False
+                    else return False
+            else return False
+    where
+        addprefix (l,p) = (l, path </> p)
+        checkFile :: (Integer, FilePath) -> IO Bool
+        checkFile (size, path) = do
+            e <- doesFileExist path
+            if e
+                then do
+                    p <- getPermissions path
+                    if readable p
+                        then do
+                            h <- openBinaryFile path ReadMode
+                            size' <- hFileSize h
+                            hClose h
+                            if size == size'
+                                then return True
+                                else return False
+                        else return False
+                else return False
+        addTorrent' :: STM ()
+        addTorrent' = do
+            torsts <- readTVar $ torrents sess
+            let
+                torst = TorrentSt {torrent = tor, path = path}
+                torsts' = M.insert (infohash tor) torst torsts
+            writeTVar (torrents sess) torsts'
