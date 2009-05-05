@@ -53,7 +53,7 @@ data Torrent = Torrent {
 -- |Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
 --  valid torrent. Throws an exception if the file can't be opened.
 loadTorrentFromFile :: FilePath -> IO (Maybe Torrent)
-loadTorrentFromFile f = fmap loadTorrent $ LBS.readFile f
+loadTorrentFromFile = fmap loadTorrent . LBS.readFile
 
 -- |Load a torrent from a URL.
 loadTorrentFromURL ::
@@ -123,19 +123,19 @@ toTorrent benc = do
         getDict d = case d of
             BDict d' -> Just d'
             _        -> Nothing
-        extractHashes hs = if ((BS.length hs) `mod` 20) == 0
+        extractHashes hs = if (BS.length hs `mod` 20) == 0
             then Just $ group20s $ BS.unpack hs
             else Nothing
         group20s (w1 : w2: w3: w4: w5:
                   w6 : w7: w8: w9:w10:
                   w11:w12:w13:w14:w15:
                   w16:w17:w18:w19:w20:ws)
-                 = (Word160
+                 = Word160
                      (pack4w8inw32  w1  w2  w3  w4)
                      (pack4w8inw32  w5  w6  w7  w8)
                      (pack4w8inw32  w9 w10 w11 w12)
                      (pack4w8inw32 w13 w14 w15 w16)
-                     (pack4w8inw32 w17 w18 w19 w20)) : group20s ws
+                     (pack4w8inw32 w17 w18 w19 w20) : group20s ws
         group20s [] = []
         group20s _  = error "group20s called with length % 20 /= 0"
         pack4w8inw32 w1 w2 w3 w4 = let
@@ -161,7 +161,7 @@ toTorrent benc = do
             Just (length,path')
         checkLength t = let
             len = either id (sum . map fst) $ files t
-            numPieces = (snd (bounds $ pieceHashes t)) + 1
+            numPieces = snd (bounds $ pieceHashes t) + 1
             numPieces' = 
                 ceiling
                     ((fromIntegral len :: Double) / (fromIntegral $ pieceLen t))
@@ -191,7 +191,7 @@ data TorrentSt = TorrentSt {
 initialize :: IO Session
 initialize = atomically $ do
     torrents <- newTVar M.empty
-    return $ Session { torrents = torrents }
+    return Session { torrents = torrents }
 
 -- |Add a torrent to a running session for seeding/checking. Since we only
 --  support seeding at present, this requires the files be in place and of the
@@ -201,7 +201,7 @@ addTorrent sess tor path = case files tor of
     Left len -> do
         ok <- checkFile (len,path)
         if ok
-            then (atomically addTorrent') >> return True
+            then atomically addTorrent' >> return True
             else return False
     Right fs -> do
         e <- doesDirectoryExist path
@@ -210,9 +210,9 @@ addTorrent sess tor path = case files tor of
                 p <- getPermissions path
                 if readable p
                     then do
-                        ok <- fmap and $ mapM checkFile $ map addprefix fs
+                        ok <- fmap and $ mapM (checkFile . addprefix) fs
                         if ok
-                            then (atomically addTorrent') >> return True
+                            then atomically addTorrent' >> return True
                             else return False
                     else return False
             else return False

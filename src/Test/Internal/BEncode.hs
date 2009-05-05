@@ -43,10 +43,10 @@ instance Arbitrary Word8 where
 
 instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Map k v) where
     arbitrary = fmap M.fromList arbitrary
-    shrink m = map M.fromList $ shrink $ M.toList m
+    shrink = map M.fromList . shrink . M.toList
 
 checkPack :: BEncode -> Bool
 checkPack x = (B.concat $ L.toChunks $ bPack x) `seq` True
 
 checkReadPack :: BEncode -> Bool
-checkReadPack x = (bRead $ bPack x) == (Just x)
+checkReadPack x = (bRead $ bPack x) == Just x
