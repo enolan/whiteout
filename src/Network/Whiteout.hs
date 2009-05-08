@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Network.Whiteout
     (
 -- *Torrents
@@ -13,9 +12,8 @@ module Network.Whiteout
     addTorrent
     ) where
 
-import Data.Array.IArray (Array, bounds, listArray)
+import Data.Array.IArray (bounds, listArray)
 import Data.Bits
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
@@ -31,24 +29,8 @@ import System.FilePath ((</>), joinPath)
 import System.IO
 
 import Internal.BEncode
+import Internal.Types
 
--- |The type of torrents.
-data Torrent = Torrent {
-    -- |The announce URL.
-    announce :: ByteString,
-    -- |The name of the top-level directory or the file if it is a single file
-    --  torrent.
-    name :: ByteString,
-    -- |Length of a piece in bytes.
-    pieceLen :: Int,
-    -- |Map piece numbers to their SHA-1 hashes.
-    pieceHashes :: Array Integer Word160,
-    -- |Either the length of the single file or a list of filenames and their
-    --  lengths.
-    files :: Either Integer [(Integer, FilePath)],
-    -- |SHA-1 of the bencoded info dictionary.
-    infohash :: Word160
-    } deriving (Show)
 
 -- |Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
 --  valid torrent. Throws an exception if the file can't be opened.
@@ -168,24 +150,6 @@ toTorrent benc = do
             in if numPieces == numPieces'
                 then Just t
                 else Nothing
-
--- |A Whiteout session. This is used for keeping track of currently open
---  torrents.
-data Session = Session {
-    -- |Map from infohashes to torrents.
-    torrents :: TVar (M.Map Word160 TorrentSt)
-    }
-
--- This should be done in Data.Digest.SHA1, but isn't for whatever reason.
--- We need it for the above Map.
-deriving instance Ord Word160
-
--- |The state of a torrent.
-data TorrentSt = TorrentSt {
-    torrent :: Torrent,
-    path :: FilePath
-    }
-    deriving Show
 
 -- This should eventually take more arguments. At least a port to listen on.
 initialize :: IO Session
