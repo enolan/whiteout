@@ -30,7 +30,8 @@ data TorrentSt = TorrentSt {
     }
     deriving Show
 
--- |The type of torrents.
+-- |The static information about a torrent, i.e. that stored in a file named
+--  @foo.torrent@.
 data Torrent = Torrent {
     -- |The announce URL.
     announce :: ByteString,
