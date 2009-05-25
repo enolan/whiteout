@@ -9,8 +9,8 @@ import System.IO
 
 import Internal.Types
 
--- |Get a piece from a torrent. Returns 'Nothing' if the piece number is out of
---  bounds.
+-- | Get a piece from a torrent. Returns 'Nothing' if the piece number is out of
+-- bounds.
 getPiece :: TorrentSt -> Integer -> IO (Maybe ByteString)
 getPiece torst piecenum = let
     tor = torrent torst
