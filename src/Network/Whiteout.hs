@@ -8,7 +8,12 @@ module Network.Whiteout
     loadTorrent,
 -- *Whiteout state
     Session(),
+    TorrentSt(),
+    torrent,
+    path,
     initialize,
+    close,
+    readLoadedTorrents,
     addTorrent,
     beginVerifyingTorrent
     ) where
@@ -35,18 +40,17 @@ import Internal.BEncode
 import Internal.Types
 
 
--- |Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
---  valid torrent. Throws an exception if the file can't be opened.
+-- | Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
+-- valid torrent. Throws an exception if the file can't be opened.
 loadTorrentFromFile :: FilePath -> IO (Maybe Torrent)
 loadTorrentFromFile = fmap loadTorrent . LBS.readFile
 
--- |Load a torrent from a URL.
+-- | Load a torrent from a URL.
 loadTorrentFromURL ::
     String ->
     IO (Either LoadTorrentFromURLError Torrent)
 loadTorrentFromURL u = do
-    let uri = parseURI u
-    case uri of
+    case parseURI u of
         Just uri' -> do
             let req = mkRequest GET uri'
             res <- simpleHTTP req
@@ -57,18 +61,18 @@ loadTorrentFromURL u = do
                     Nothing -> Left NotATorrent
         Nothing   -> return $ Left URLInvalid
 
--- |Things that could go wrong downloading and loading a torrent.
+-- | Things that could go wrong downloading and loading a torrent.
 data LoadTorrentFromURLError =
-    -- |Download failed.
+    -- | Download failed.
       DownloadFailed
-    -- |URL was invalid.
+    -- | URL was invalid.
     | URLInvalid
-    -- |Download succeeded, but what we got was not a torrent.
+    -- | Download succeeded, but what we got was not a torrent.
     | NotATorrent
     deriving (Show, Eq)
 
--- |Load a torrent from a 'LBS.ByteString'. Returns 'Nothing' if the parameter
---  is not a valid torrent.
+-- | Load a torrent from a 'LBS.ByteString'. Returns 'Nothing' if the parameter
+-- is not a valid torrent.
 loadTorrent :: LBS.ByteString -> Maybe Torrent
 loadTorrent bs = bRead bs >>= toTorrent
 
@@ -160,9 +164,18 @@ initialize = atomically $ do
     torrents <- newTVar M.empty
     return Session { torrents = torrents }
 
--- |Add a torrent to a running session for seeding/checking. Since we only
---  support seeding at present, this requires the files be in place and of the
---  correct size. Returns 'True' on success.
+-- | Clean up after ourselves, closing file handles, ending connections, etc.
+-- Run this before exiting.
+close :: Session -> IO ()
+close s = return ()
+
+-- | Get the currently loaded torrents, keyed by infohash.
+readLoadedTorrents :: Session -> STM (M.Map Word160 TorrentSt)
+readLoadedTorrents s = readTVar $ torrents s
+
+-- | Add a torrent to a running session for seeding/checking. Since we only
+-- support seeding at present, this requires the files be in place and of the
+-- correct size. Returns 'True' on success.
 addTorrent :: Session -> Torrent -> FilePath -> IO Bool
 addTorrent sess tor path = case files tor of
     Left len -> do
