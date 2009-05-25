@@ -25,10 +25,12 @@ deriving instance Ord Word160
 -- | The state of a torrent.
 data TorrentSt = TorrentSt {
     torrent :: Torrent,
-    path :: FilePath
+    path :: FilePath,
+    -- | Is a given piece completed? For now (2009-05-24) this only reflects
+    -- whether a piece's hash has been checked and found correct.
+    completion :: TArray Integer Bool,
     verified :: TVar Bool
     }
-    deriving Show
 
 -- | The static information about a torrent, i.e. that stored in a file named
 -- @foo.torrent@.

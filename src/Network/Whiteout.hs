@@ -18,7 +18,8 @@ module Network.Whiteout
     beginVerifyingTorrent
     ) where
 
-import Data.Array.IArray (bounds, listArray)
+import Data.Array.IArray ((!), bounds, listArray)
+import Data.Array.MArray (newArray, writeArray)
 import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -36,6 +37,7 @@ import System.FilePath ((</>), joinPath)
 import System.IO
 
 import Internal.BEncode
+import Internal.Pieces
 import Internal.Types
 
 
@@ -216,19 +218,39 @@ addTorrent sess tor path = case files tor of
         addTorrent' :: STM ()
         addTorrent' = do
             torsts <- readTVar $ torrents sess
+            completion <- newArray (bounds $ pieceHashes tor) False
+            verified <- newTVar False
             let
-                torst = TorrentSt {torrent = tor, path = path}
+                torst = TorrentSt {
+                    torrent = tor,
+                    path = path,
+                    completion = completion,
+                    verified = verified
+                    }
                 torsts' = M.insert (infohash tor) torst torsts
             writeTVar (torrents sess) torsts'
 
 -- |Verify the hashes of a torrent.
-beginVerifyingTorrent :: Session -> Word160 -> IO ()
-beginVerifyingTorrent sess thehash = do
--- TODO: revise this interface when I figure out the interface to Session etc.
--- I think we either need to return a Bool or take a TorrentSt.
-    torst <- fmap fromJust $ M.lookup thehash $ torrents sess
+beginVerifyingTorrent :: TorrentSt -> IO ()
+beginVerifyingTorrent torst = do
+    atomically $ writeTVar (verified torst) False
     forkIO (verify 0)
     return ()
     where
-        verifyIt :: Integer -> IO ()
-        verifyIt piecenum = 
+        verify :: Integer -> IO ()
+        verify piecenum = do
+            piece <- getPiece torst piecenum
+            case piece of
+                Nothing -> error "Couldn't load a piece for verifying!"
+                Just piece' -> do
+                    let
+                        expected = ((pieceHashes $ torrent torst) ! piecenum)
+                        actual = hash $ BS.unpack piece'
+                    if actual == expected
+                        then atomically $
+                            writeArray (completion torst) piecenum True
+                        else atomically $
+                            writeArray (completion torst) piecenum False
+                    if piecenum == (snd $ bounds $ pieceHashes $ torrent torst)
+                        then atomically $ writeTVar (verified torst) True
+                        else verify (piecenum+1)
