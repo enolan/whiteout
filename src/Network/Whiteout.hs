@@ -42,8 +42,7 @@ loadTorrentFromURL ::
     String ->
     IO (Either LoadTorrentFromURLError Torrent)
 loadTorrentFromURL u = do
-    let uri = parseURI u
-    case uri of
+    case parseURI u of
         Just uri' -> do
             let req = mkRequest GET uri'
             res <- simpleHTTP req
