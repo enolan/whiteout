@@ -9,7 +9,8 @@ module Network.Whiteout
 -- *Whiteout state
     Session(),
     initialize,
-    addTorrent
+    addTorrent,
+    beginVerifyingTorrent
     ) where
 
 import Data.Array.IArray (bounds, listArray)
@@ -19,6 +20,8 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
 import Data.Digest.SHA1 (Word160(..), hash)
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
+import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Network.URI (parseURI)
 import Network.HTTP
@@ -205,3 +208,15 @@ addTorrent sess tor path = case files tor of
                 torst = TorrentSt {torrent = tor, path = path}
                 torsts' = M.insert (infohash tor) torst torsts
             writeTVar (torrents sess) torsts'
+
+-- |Verify the hashes of a torrent.
+beginVerifyingTorrent :: Session -> Word160 -> IO ()
+beginVerifyingTorrent sess thehash = do
+-- TODO: revise this interface when I figure out the interface to Session etc.
+-- I think we either need to return a Bool or take a TorrentSt.
+    torst <- fmap fromJust $ M.lookup thehash $ torrents sess
+    forkIO (verify 0)
+    return ()
+    where
+        verifyIt :: Integer -> IO ()
+        verifyIt piecenum = 
