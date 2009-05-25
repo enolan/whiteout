@@ -24,8 +24,6 @@ deriving instance Ord Word160
 
 -- | The state of a torrent.
 data TorrentSt = TorrentSt {
--- TODO: we need a method of saving these between program sessions. AKA "fast
--- resume"
     torrent :: Torrent,
     path :: FilePath
     verified :: TVar Bool
