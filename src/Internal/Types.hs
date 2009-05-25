@@ -12,8 +12,7 @@ import Data.ByteString (ByteString)
 import qualified Data.Map as M
 import Data.Digest.SHA1 (Word160(..))
 
--- |A Whiteout session. This is used for keeping track of currently open
---  torrents.
+-- |A Whiteout session. Contains various internal state.
 data Session = Session {
     -- |Map from infohashes to torrents.
     torrents :: TVar (M.Map Word160 TorrentSt)

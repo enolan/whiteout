@@ -8,7 +8,12 @@ module Network.Whiteout
     loadTorrent,
 -- *Whiteout state
     Session(),
+    TorrentSt(),
+    torrent,
+    path,
     initialize,
+    close,
+    readLoadedTorrents,
     addTorrent
     ) where
 
@@ -155,6 +160,15 @@ initialize :: IO Session
 initialize = atomically $ do
     torrents <- newTVar M.empty
     return Session { torrents = torrents }
+
+-- |Clean up after ourselves, closing file handles, ending connections, etc.
+--  Run this before exiting.
+close :: Session -> IO ()
+close s = return ()
+
+-- |Get the currently loaded torrents, keyed by infohash.
+readLoadedTorrents :: Session -> STM (M.Map Word160 TorrentSt)
+readLoadedTorrents s = readTVar $ torrents s
 
 -- |Add a torrent to a running session for seeding/checking. Since we only
 --  support seeding at present, this requires the files be in place and of the
