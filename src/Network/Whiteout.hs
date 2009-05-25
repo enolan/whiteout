@@ -14,12 +14,14 @@ module Network.Whiteout
     initialize,
     close,
     readLoadedTorrents,
+    isPieceComplete,
+    isTorrentVerified,
     addTorrent,
     beginVerifyingTorrent
     ) where
 
 import Data.Array.IArray ((!), bounds, listArray)
-import Data.Array.MArray (newArray, writeArray)
+import Data.Array.MArray (newArray, readArray, writeArray)
 import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -174,6 +176,13 @@ close _ = return ()
 readLoadedTorrents :: Session -> STM (M.Map Word160 TorrentSt)
 readLoadedTorrents s = readTVar $ torrents s
 
+-- | Is a given piece complete?
+isPieceComplete :: TorrentSt -> Integer -> STM Bool
+isPieceComplete torst = readArray (completion torst)
+
+isTorrentVerified :: TorrentSt -> STM Bool
+isTorrentVerified = readTVar . verified
+
 -- | Add a torrent to a running session for seeding/checking. Since we only
 -- support seeding at present, this requires the files be in place and of the
 -- correct size. Returns 'True' on success.
@@ -230,7 +239,8 @@ addTorrent sess tor path = case files tor of
                 torsts' = M.insert (infohash tor) torst torsts
             writeTVar (torrents sess) torsts'
 
--- |Verify the hashes of a torrent.
+-- |Verify the hashes of a torrent. 'isTorrentVerified' will be 'True' when
+-- the verifier thread finishes.
 beginVerifyingTorrent :: TorrentSt -> IO ()
 beginVerifyingTorrent torst = do
     atomically $ writeTVar (verified torst) False
