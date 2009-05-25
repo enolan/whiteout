@@ -25,7 +25,6 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
 import Data.Digest.SHA1 (Word160(..), hash)
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Network.URI (parseURI)
@@ -167,7 +166,7 @@ initialize = atomically $ do
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
 -- Run this before exiting.
 close :: Session -> IO ()
-close s = return ()
+close _ = return ()
 
 -- | Get the currently loaded torrents, keyed by infohash.
 readLoadedTorrents :: Session -> STM (M.Map Word160 TorrentSt)
