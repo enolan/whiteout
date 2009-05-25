@@ -20,7 +20,7 @@ Library
                         parsec == 2.*, stm == 2.*
     Exposed-modules:    Network.Whiteout
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
-                        Internal.Types
+                        Internal.Pieces, Internal.Types
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
     Extensions:         OverloadedStrings, StandaloneDeriving
@@ -33,10 +33,13 @@ Executable runTests
     Main-is:            Test/runTests.hs
     Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
                         containers, Crypto == 4.*, directory == 1.*,
-                        filepath == 1.*, HTTP == 4000.*, network == 2.*,
-                        parsec == 2.*, QuickCheck == 2.*, stm == 2.*,
-                        test-framework, test-framework-quickcheck2
-    Other-modules:      Test.Internal.BEncode, Internal.BEncode,
-                        Internal.BEncode.Lexer, Internal.Types
+                        filepath == 1.*, HTTP == 4000.*, HUnit == 1.2.*,
+                        network == 2.*, parsec == 2.*, QuickCheck == 2.*,
+                        stm == 2.*, test-framework, test-framework-hunit,
+                        test-framework-quickcheck2
+    Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
+                        Internal.Pieces, Internal.Types, Network.Whiteout,
+                        Test.Internal.BEncode, Test.Network.Whiteout
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
+    Extensions:         OverloadedStrings, StandaloneDeriving
