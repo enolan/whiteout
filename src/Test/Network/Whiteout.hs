@@ -19,7 +19,7 @@ verifySingleFile = do
     res <- addTorrent sess tor'
         "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3"
     assertBool "Adding failed" res
-    torrents <- atomically $ readLoadedTorrents sess
+    torrents <- atomically $ getActiveTorrents sess
     let
         torst = M.lookup
             (Word160 958421318 1479285429 3749561784 3909306547 1811215688)

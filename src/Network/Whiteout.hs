@@ -13,7 +13,7 @@ module Network.Whiteout
     path,
     initialize,
     close,
-    readLoadedTorrents,
+    getActiveTorrents,
     isPieceComplete,
     isBeingVerified,
     addTorrent,
@@ -172,9 +172,11 @@ initialize = atomically $ do
 close :: Session -> IO ()
 close _ = return ()
 
--- | Get the currently loaded torrents, keyed by infohash.
-readLoadedTorrents :: Session -> STM (M.Map Word160 TorrentSt)
-readLoadedTorrents s = readTVar $ torrents s
+-- | Get the currently active torrents, keyed by infohash. A torrent is active
+-- as long as it has been 'addTorrent'ed; one can be simultaneous active and
+-- stopped - ready to go but not actually doing anything yet.
+getActiveTorrents :: Session -> STM (M.Map Word160 TorrentSt)
+getActiveTorrents s = readTVar $ torrents s
 
 -- | Is a given piece complete?
 isPieceComplete :: TorrentSt -> Integer -> STM Bool
