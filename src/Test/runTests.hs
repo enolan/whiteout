@@ -12,7 +12,8 @@ tests = [
         testProperty "checkReadPack" checkReadPack
         ],
     testGroup "Network.Whiteout" [
-        testCase "verifySingleFile" verifySingleFile
+        testCase "verifySingleFileShouldSucceed" verifySingleFileShouldSucceed,
+        testCase "verifySingleFileShouldFail" verifySingleFileShouldFail
         ]
     ]
 
