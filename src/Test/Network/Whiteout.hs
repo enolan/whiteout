@@ -28,10 +28,10 @@ verifySingleFile = do
     let torst' = fromJust torst
     beginVerifyingTorrent torst'
     atomically $ do
-        verified <- isTorrentVerified torst'
-        if verified
-            then return ()
-            else retry
+        verifying <- isBeingVerified torst'
+        if verifying
+            then retry
+            else return ()
     let (_, max) = bounds $ pieceHashes tor'
     allGood <- fmap and $ atomically (mapM (isPieceComplete torst') [0..max])
     assertBool "Not all pieces passed verification" allGood

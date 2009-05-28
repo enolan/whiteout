@@ -29,7 +29,7 @@ data TorrentSt = TorrentSt {
     -- | Is a given piece completed? For now (2009-05-24) this only reflects
     -- whether a piece's hash has been checked and found correct.
     completion :: TArray Integer Bool,
-    verified :: TVar Bool
+    verifying :: TVar Bool
     }
 
 -- | The static information about a torrent, i.e. that stored in a file named

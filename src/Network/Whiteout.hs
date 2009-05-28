@@ -15,7 +15,7 @@ module Network.Whiteout
     close,
     readLoadedTorrents,
     isPieceComplete,
-    isTorrentVerified,
+    isBeingVerified,
     addTorrent,
     beginVerifyingTorrent
     ) where
@@ -180,8 +180,9 @@ readLoadedTorrents s = readTVar $ torrents s
 isPieceComplete :: TorrentSt -> Integer -> STM Bool
 isPieceComplete torst = readArray (completion torst)
 
-isTorrentVerified :: TorrentSt -> STM Bool
-isTorrentVerified = readTVar . verified
+-- | Is the given torrent being verified currently?
+isBeingVerified :: TorrentSt -> STM Bool
+isBeingVerified = readTVar . verifying
 
 -- | Add a torrent to a running session for seeding/checking. Since we only
 -- support seeding at present, this requires the files be in place and of the
@@ -228,22 +229,21 @@ addTorrent sess tor path = case files tor of
         addTorrent' = do
             torsts <- readTVar $ torrents sess
             completion <- newArray (bounds $ pieceHashes tor) False
-            verified <- newTVar False
+            verifying <- newTVar False
             let
                 torst = TorrentSt {
                     torrent = tor,
                     path = path,
                     completion = completion,
-                    verified = verified
+                    verifying = verifying
                     }
                 torsts' = M.insert (infohash tor) torst torsts
             writeTVar (torrents sess) torsts'
 
--- |Verify the hashes of a torrent. 'isTorrentVerified' will be 'True' when
--- the verifier thread finishes.
+-- | Verify the hashes of a torrent. See also 'isBeingVerified'.
 beginVerifyingTorrent :: TorrentSt -> IO ()
 beginVerifyingTorrent torst = do
-    atomically $ writeTVar (verified torst) False
+    atomically $ writeTVar (verifying torst) True
     forkIO (verify 0)
     return ()
     where
@@ -262,5 +262,5 @@ beginVerifyingTorrent torst = do
                         else atomically $
                             writeArray (completion torst) piecenum False
                     if piecenum == (snd $ bounds $ pieceHashes $ torrent torst)
-                        then atomically $ writeTVar (verified torst) True
+                        then atomically $ writeTVar (verifying torst) False
                         else verify (piecenum+1)
