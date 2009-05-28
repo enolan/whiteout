@@ -9,13 +9,14 @@ module Network.Whiteout
 -- *Whiteout state
     Session(),
     TorrentSt(),
+    Activity(..),
     torrent,
     path,
     initialize,
     close,
     getActiveTorrents,
     isPieceComplete,
-    isBeingVerified,
+    getActivity,
     addTorrent,
     beginVerifyingTorrent
     ) where
@@ -182,9 +183,8 @@ getActiveTorrents s = readTVar $ torrents s
 isPieceComplete :: TorrentSt -> Integer -> STM Bool
 isPieceComplete torst = readArray (completion torst)
 
--- | Is the given torrent being verified currently?
-isBeingVerified :: TorrentSt -> STM Bool
-isBeingVerified = readTVar . verifying
+getActivity :: TorrentSt -> STM Activity
+getActivity = readTVar . activity
 
 -- | Add a torrent to a running session for seeding/checking. Since we only
 -- support seeding at present, this requires the files be in place and of the
@@ -231,21 +231,21 @@ addTorrent sess tor path = case files tor of
         addTorrent' = do
             torsts <- readTVar $ torrents sess
             completion <- newArray (bounds $ pieceHashes tor) False
-            verifying <- newTVar False
+            activity <- newTVar Stopped
             let
                 torst = TorrentSt {
                     torrent = tor,
                     path = path,
                     completion = completion,
-                    verifying = verifying
+                    activity = activity
                     }
                 torsts' = M.insert (infohash tor) torst torsts
             writeTVar (torrents sess) torsts'
 
--- | Verify the hashes of a torrent. See also 'isBeingVerified'.
+-- | Verify the hashes of a torrent. See also 'getActivity'.
 beginVerifyingTorrent :: TorrentSt -> IO ()
 beginVerifyingTorrent torst = do
-    atomically $ writeTVar (verifying torst) True
+    atomically $ writeTVar (activity torst) Verifying
     forkIO (verify 0)
     return ()
     where
@@ -264,5 +264,5 @@ beginVerifyingTorrent torst = do
                         else atomically $
                             writeArray (completion torst) piecenum False
                     if piecenum == (snd $ bounds $ pieceHashes $ torrent torst)
-                        then atomically $ writeTVar (verifying torst) False
+                        then atomically $ writeTVar (activity torst) Stopped
                         else verify (piecenum+1)

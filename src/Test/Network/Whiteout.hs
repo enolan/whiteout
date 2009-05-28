@@ -28,8 +28,8 @@ verifySingleFile = do
     let torst' = fromJust torst
     beginVerifyingTorrent torst'
     atomically $ do
-        verifying <- isBeingVerified torst'
-        if verifying
+        activity <- getActivity torst'
+        if activity == Verifying
             then retry
             else return ()
     let (_, max) = bounds $ pieceHashes tor'

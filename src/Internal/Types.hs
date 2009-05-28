@@ -3,7 +3,8 @@ module Internal.Types
     (
     Session(..),
     TorrentSt(..),
-    Torrent(..)
+    Torrent(..),
+    Activity(..)
     ) where
 
 import Control.Concurrent.STM
@@ -29,7 +30,7 @@ data TorrentSt = TorrentSt {
     -- | Is a given piece completed? For now (2009-05-24) this only reflects
     -- whether a piece's hash has been checked and found correct.
     completion :: TArray Integer Bool,
-    verifying :: TVar Bool
+    activity :: TVar Activity
     }
 
 -- | The static information about a torrent, i.e. that stored in a file named
@@ -50,3 +51,9 @@ data Torrent = Torrent {
     -- | SHA-1 of the bencoded info dictionary.
     infohash :: Word160
     } deriving (Show)
+
+-- | What is being done with a torrent at a given moment.
+data Activity =
+    Stopped
+  | Verifying
+    deriving (Eq, Ord, Show)
