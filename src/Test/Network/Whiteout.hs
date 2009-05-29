@@ -23,32 +23,42 @@ addTorWithAssert sess tor path = do
     assertBool "Couldn't find TorrentSt" $ isJust torst
     return $ fromJust torst
 
-verifySingleFileShouldSucceed :: Assertion
-verifySingleFileShouldSucceed = do
+verifyGeneric :: FilePath -> FilePath -> Bool -> Assertion
+verifyGeneric torpath datapath expectedResult = do
     sess <- initialize
-    tor <- loadTorWithAssert "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
-    torst <- addTorWithAssert sess tor "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3"
+    tor <- loadTorWithAssert torpath
+    torst <- addTorWithAssert sess tor datapath
     beginVerifyingTorrent torst
     atomically $ do
         activity <- getActivity torst
-        if activity == Verifying
-            then retry
-            else return ()
+        case activity of
+            Verifying -> retry
+            Stopped -> return ()
     let (_, max) = bounds $ pieceHashes tor
-    allGood <- fmap and $ atomically (mapM (isPieceComplete torst) [0..max])
-    assertBool "Not all pieces passed verification" allGood
+    allExpected <- fmap and $ atomically
+        (mapM (\i -> (==expectedResult) <$> (isPieceComplete torst i)) [0..max])
+    assertBool "Some pieces were not verified as expected" allExpected
+
+verifySingleFileShouldSucceed :: Assertion
+verifySingleFileShouldSucceed = verifyGeneric
+    "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
+    "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3"
+    True
 
 verifySingleFileShouldFail :: Assertion
-verifySingleFileShouldFail = do
-    sess <- initialize
-    tor <- loadTorWithAssert "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
-    torst <- addTorWithAssert sess tor "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.zeroes"
-    beginVerifyingTorrent torst
-    atomically $ do
-        activity <- getActivity torst
-        if activity == Verifying
-            then retry
-            else return ()
-    let (_, max) = bounds $ pieceHashes tor
-    allBad <- fmap (and . map not) $ atomically (mapM (isPieceComplete torst) [0..max])
-    assertBool "Some pieces passed verification" allBad
+verifySingleFileShouldFail = verifyGeneric
+    "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
+    "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.zeroes"
+    False
+
+verifyMultiFileShouldSucceed :: Assertion
+verifyMultiFileShouldSucceed = verifyGeneric
+    "test-data/larry lessig - code v2.torrent"
+    "test-data/Larry Lessig - Code V2"
+    True
+
+verifyMultiFileShouldFail :: Assertion
+verifyMultiFileShouldFail = verifyGeneric
+    "test-data/larry lessig - code v2.torrent"
+    "test-data/Larry Lessig - Code V2.zeroes"
+    True

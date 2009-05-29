@@ -13,7 +13,9 @@ tests = [
         ],
     testGroup "Network.Whiteout" [
         testCase "verifySingleFileShouldSucceed" verifySingleFileShouldSucceed,
-        testCase "verifySingleFileShouldFail" verifySingleFileShouldFail
+        testCase "verifySingleFileShouldFail" verifySingleFileShouldFail,
+        testCase "verifyMultiFileShouldSucceed" verifyMultiFileShouldSucceed,
+        testCase "verifyMultiFileShouldFail" verifyMultiFileShouldFail
         ]
     ]
 
