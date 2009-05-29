@@ -23,11 +23,10 @@ module Network.Whiteout
 
 import Data.Array.IArray ((!), bounds, listArray)
 import Data.Array.MArray (newArray, readArray, writeArray)
-import Data.Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
-import Data.Digest.SHA1 (Word160(..), hash)
+import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import qualified Data.Map as M
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
@@ -85,7 +84,9 @@ toTorrent benc = do
     dict <- getDict benc
     announce <- M.lookup "announce" dict >>= getString
     info <- M.lookup "info" dict >>= getDict
-    let infohash = hash $ LBS.unpack $ bPack $ BDict info
+    let
+        infohash = BS.concat $ LBS.toChunks $ bytestringDigest $ sha1 $ bPack $
+            BDict info
     pieceLen <- M.lookup "piece length" info >>= getInt
     pieceHashes <- M.lookup "pieces" info >>= getString
     pieceHashes' <- extractHashes pieceHashes
@@ -117,26 +118,11 @@ toTorrent benc = do
             BDict d' -> Just d'
             _        -> Nothing
         extractHashes hs = if (BS.length hs `mod` 20) == 0
-            then Just $ group20s $ BS.unpack hs
+            then Just $ groupHashes hs
             else Nothing
-        group20s (w1 : w2: w3: w4: w5:
-                  w6 : w7: w8: w9:w10:
-                  w11:w12:w13:w14:w15:
-                  w16:w17:w18:w19:w20:ws)
-                 = Word160
-                     (pack4w8inw32  w1  w2  w3  w4)
-                     (pack4w8inw32  w5  w6  w7  w8)
-                     (pack4w8inw32  w9 w10 w11 w12)
-                     (pack4w8inw32 w13 w14 w15 w16)
-                     (pack4w8inw32 w17 w18 w19 w20) : group20s ws
-        group20s [] = []
-        group20s _  = error "group20s called with length % 20 /= 0"
-        pack4w8inw32 w1 w2 w3 w4 = let
-            w1' = shift (fromIntegral w1) 24
-            w2' = shift (fromIntegral w2) 16
-            w3' = shift (fromIntegral w3) 8
-            w4' = fromIntegral w4
-            in w1' .|. w2' .|. w3' .|. w4'
+        groupHashes hs = if BS.null hs
+            then []
+            else let (hash, rest) = BS.splitAt 20 hs in hash : groupHashes rest
         getFiles i = let
             length = M.lookup "length" i >>= getInt
             files  = M.lookup "files" i >>= getList
@@ -176,7 +162,7 @@ close _ = return ()
 -- | Get the currently active torrents, keyed by infohash. A torrent is active
 -- as long as it has been 'addTorrent'ed; one can be simultaneous active and
 -- stopped - ready to go but not actually doing anything yet.
-getActiveTorrents :: Session -> STM (M.Map Word160 TorrentSt)
+getActiveTorrents :: Session -> STM (M.Map BS.ByteString TorrentSt)
 getActiveTorrents s = readTVar $ torrents s
 
 -- | Is a given piece complete?
@@ -257,7 +243,8 @@ beginVerifyingTorrent torst = do
                 Just piece' -> do
                     let
                         expected = ((pieceHashes $ torrent torst) ! piecenum)
-                        actual = hash $ BS.unpack piece'
+                        actual = BS.concat $ LBS.toChunks $ bytestringDigest $
+                            sha1 $ LBS.fromChunks [piece']
                     if actual == expected
                         then atomically $
                             writeArray (completion torst) piecenum True

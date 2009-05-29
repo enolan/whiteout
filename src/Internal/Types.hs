@@ -11,17 +11,12 @@ import Control.Concurrent.STM
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
-import Data.Digest.SHA1 (Word160(..))
 
 -- | A Whiteout session. Contains various internal state.
 data Session = Session {
     -- | Map from infohashes to torrents.
-    torrents :: TVar (M.Map Word160 TorrentSt)
+    torrents :: TVar (M.Map ByteString TorrentSt)
     }
-
--- This should be done in Data.Digest.SHA1, but isn't for whatever reason.
--- We need it for the above Map.
-deriving instance Ord Word160
 
 -- | The state of a torrent.
 data TorrentSt = TorrentSt {
@@ -44,12 +39,12 @@ data Torrent = Torrent {
     -- | Length of a piece in bytes.
     pieceLen :: Int,
     -- | Map piece numbers to their SHA-1 hashes.
-    pieceHashes :: Array Integer Word160,
+    pieceHashes :: Array Integer ByteString,
     -- | Either the length of the single file or a list of filenames and their
     -- lengths.
     files :: Either Integer [(Integer, FilePath)],
     -- | SHA-1 of the bencoded info dictionary.
-    infohash :: Word160
+    infohash :: ByteString
     } deriving (Show)
 
 -- | What is being done with a torrent at a given moment.

@@ -15,9 +15,9 @@ Flag Test
 
 Library
     Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
-                        containers, Crypto == 4.*, directory == 1.*,
-                        filepath == 1.*, HTTP == 4000.*, network == 2.*,
-                        parsec == 2.*, stm == 2.*
+                        containers, directory == 1.*, filepath == 1.*,
+                        HTTP == 4000.*, network == 2.*, parsec == 2.*,
+                        SHA == 1.4.*, stm == 2.*
     Exposed-modules:    Network.Whiteout
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
                         Internal.Pieces, Internal.Types
@@ -32,9 +32,9 @@ Executable runTests
         Buildable:          False
     Main-is:            Test/runTests.hs
     Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
-                        containers, Crypto == 4.*, directory == 1.*,
-                        filepath == 1.*, HTTP == 4000.*, HUnit == 1.2.*,
-                        network == 2.*, parsec == 2.*, QuickCheck == 2.*,
+                        containers, directory == 1.*, filepath == 1.*,
+                        HTTP == 4000.*, HUnit == 1.2.*, network == 2.*,
+                        parsec == 2.*, QuickCheck == 2.*, SHA == 1.4.*,
                         stm == 2.*, test-framework, test-framework-hunit,
                         test-framework-quickcheck2
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
