@@ -1,20 +1,24 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Test.Internal.BEncode
-    (
-    checkPack,
-    checkReadPack
-    ) where
+module Test.Internal.BEncode (theTests) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Word (Word8)
+import Test.Framework
+import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
     (Arbitrary(..), Gen, elements, oneof, resize, sized)
 
 import Internal.BEncode
+
+theTests :: Test
+theTests = testGroup "Internal.BEncode" [
+    testProperty "checkPack" checkPack,
+    testProperty "checkReadPack" checkReadPack
+    ]
 
 instance Arbitrary BEncode where
     arbitrary = sized genBEncode

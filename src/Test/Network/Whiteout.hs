@@ -1,13 +1,24 @@
-module Test.Network.Whiteout where
+module Test.Network.Whiteout (theTests) where
 
 import Control.Applicative
 import Control.Concurrent.STM
 import Data.Array.IArray
 import qualified Data.Map as M
 import Data.Maybe
+import Test.Framework
+import Test.Framework.Providers.HUnit
 import Test.HUnit
 
 import Network.Whiteout
+
+theTests :: Test.Framework.Test
+theTests =
+    testGroup "Network.Whiteout" [
+    testCase "verifySingleFileShouldSucceed" verifySingleFileShouldSucceed,
+    testCase "verifySingleFileShouldFail" verifySingleFileShouldFail,
+    testCase "verifyMultiFileShouldSucceed" verifyMultiFileShouldSucceed,
+    testCase "verifyMultiFileShouldFail" verifyMultiFileShouldFail
+    ]
 
 loadTorWithAssert :: FilePath -> IO Torrent
 loadTorWithAssert path = do

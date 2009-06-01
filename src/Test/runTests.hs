@@ -1,22 +1,12 @@
 import Test.Framework
-import Test.Framework.Providers.QuickCheck2
-import Test.Framework.Providers.HUnit
 
 import Test.Internal.BEncode
 import Test.Network.Whiteout
 
 tests :: [Test]
 tests = [
-    testGroup "Internal.BEncode" [
-        testProperty "checkPack" checkPack,
-        testProperty "checkReadPack" checkReadPack
-        ],
-    testGroup "Network.Whiteout" [
-        testCase "verifySingleFileShouldSucceed" verifySingleFileShouldSucceed,
-        testCase "verifySingleFileShouldFail" verifySingleFileShouldFail,
-        testCase "verifyMultiFileShouldSucceed" verifyMultiFileShouldSucceed,
-        testCase "verifyMultiFileShouldFail" verifyMultiFileShouldFail
-        ]
+    Test.Internal.BEncode.theTests,
+    Test.Network.Whiteout.theTests
     ]
 
 main :: IO ()
