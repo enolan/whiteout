@@ -204,10 +204,8 @@ addTorrent sess tor path = case files tor of
                 then do
                     p <- getPermissions path
                     if readable p
-                        then do
-                            h <- openBinaryFile path ReadMode
+                        then withBinaryFile path ReadMode $ \h -> do
                             size' <- hFileSize h
-                            hClose h
                             if size == size'
                                 then return True
                                 else return False

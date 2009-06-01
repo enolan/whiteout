@@ -23,9 +23,7 @@ getPiece torst piecenum = let
                 Left len -> if offset > len
                     then return Nothing
                     else
-                        C.bracket
-                            (openBinaryFile (path torst) ReadMode)
-                            hClose
+                        withBinaryFile (path torst) ReadMode
                             (\h -> do
                                 hSeek h AbsoluteSeek offset
                                 Just <$> B.hGet h (pieceLen tor))
