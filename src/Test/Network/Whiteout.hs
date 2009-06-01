@@ -72,4 +72,4 @@ verifyMultiFileShouldFail :: Assertion
 verifyMultiFileShouldFail = verifyGeneric
     "test-data/larry lessig - code v2.torrent"
     "test-data/Larry Lessig - Code V2.zeroes"
-    True
+    False
