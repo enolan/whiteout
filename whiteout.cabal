@@ -9,6 +9,7 @@ Category:           Network
 Synopsis:           A BitTorrent library.
 Build-Type:         Simple
 Tested-With:        GHC == 6.10.3
+Extra-Source-Files: README
 
 Flag Test
     Description:        Build the testsuite, i.e. runTests
