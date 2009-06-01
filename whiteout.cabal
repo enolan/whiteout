@@ -8,6 +8,7 @@ Homepage:           http://github.com/enolan/whiteout
 Category:           Network
 Synopsis:           A BitTorrent library.
 Build-Type:         Simple
+Tested-With:        GHC == 6.10.3
 
 Flag Test
     Description:        Build the testsuite, i.e. runTests
