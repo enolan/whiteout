@@ -3,6 +3,7 @@ module Internal.Pieces
     getPiece
     ) where
 
+import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import System.IO
@@ -22,5 +23,7 @@ getPiece torst piecenum = let
                 -- TODO: handle pools
                 h <- openBinaryFile (path torst) ReadMode
                 hSeek h AbsoluteSeek offset
-                fmap Just $ B.hGet h (pieceLen tor)
+                piece <- Just <$> B.hGet h (pieceLen tor)
+                hClose h
+                return piece
         Right _ -> error "multifile reading not implemented."
