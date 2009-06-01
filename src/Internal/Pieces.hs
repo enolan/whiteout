@@ -30,4 +30,4 @@ getPiece torst piecenum = let
                                 hSeek h AbsoluteSeek offset
                                 Just <$> B.hGet h (pieceLen tor))
                 Right _ -> return Nothing)
-            (\(e :: C.IOException) -> return Nothing)
+            (\(_ :: C.IOException) -> return Nothing)
