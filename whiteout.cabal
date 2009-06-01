@@ -1,13 +1,13 @@
-Name:              whiteout
-Version:           0.1
-Cabal-Version:     >= 1.2
-License:           BSD3
-License-File:      COPYING
-Author:            Echo Nolan <echo@echonolan.net>
-Homepage:          http://github.com/enolan/whiteout
-Category:          Network
-Synopsis:          A BitTorrent library.
-Build-Type:        Simple
+Name:               whiteout
+Version:            0.1
+Cabal-Version:      >= 1.2
+License:            BSD3
+License-File:       COPYING
+Author:             Echo Nolan <echo@echonolan.net>
+Homepage:           http://github.com/enolan/whiteout
+Category:           Network
+Synopsis:           A BitTorrent library.
+Build-Type:         Simple
 
 Flag Test
     Description:        Build the testsuite, i.e. runTests
