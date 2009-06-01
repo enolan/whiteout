@@ -239,7 +239,10 @@ beginVerifyingTorrent torst = do
         verify piecenum = do
             piece <- getPiece torst piecenum
             case piece of
-                Nothing -> error "Couldn't load a piece for verifying!"
+                Nothing -> do
+                    atomically $ writeTVar (activity torst) Stopped
+                    error "Couldn't load a piece for verifying!"
+                    -- TODO we need a real error logging mechanism.
                 Just piece' -> do
                     let
                         expected = ((pieceHashes $ torrent torst) ! piecenum)
