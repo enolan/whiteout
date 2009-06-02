@@ -2,8 +2,6 @@
 
 module Test.Internal.BEncode (theTests) where
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
 import Data.Map (Map)
 import qualified Data.Map as M
 import Test.Framework
