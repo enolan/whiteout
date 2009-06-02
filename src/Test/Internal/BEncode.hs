@@ -14,8 +14,7 @@ import Test.ArbitraryInstances ()
 
 theTests :: Test
 theTests = testGroup "Internal.BEncode" [
-    testProperty "checkPack" checkPack,
-    testProperty "checkReadPack" checkReadPack
+    testProperty "bencodeRoundTrip" bencodeRoundTrip
     ]
 
 instance Arbitrary BEncode where
@@ -40,8 +39,5 @@ instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Map k v) where
     arbitrary = fmap M.fromList arbitrary
     shrink = map M.fromList . shrink . M.toList
 
-checkPack :: BEncode -> Bool
-checkPack x = (B.concat $ L.toChunks $ bPack x) `seq` True
-
-checkReadPack :: BEncode -> Bool
-checkReadPack x = (bRead $ bPack x) == Just x
+bencodeRoundTrip :: BEncode -> Bool
+bencodeRoundTrip x = (bRead $ bPack x) == Just x
