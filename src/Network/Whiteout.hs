@@ -2,6 +2,7 @@ module Network.Whiteout
     (
 -- *Torrents
     Torrent(..),
+    PieceNum,
     loadTorrentFromFile,
     loadTorrentFromURL,
     LoadTorrentFromURLError(..),
@@ -166,7 +167,7 @@ getActiveTorrents :: Session -> STM (M.Map BS.ByteString TorrentSt)
 getActiveTorrents s = readTVar $ torrents s
 
 -- | Is a given piece complete?
-isPieceComplete :: TorrentSt -> Integer -> STM Bool
+isPieceComplete :: TorrentSt -> PieceNum -> STM Bool
 isPieceComplete torst = readArray (completion torst)
 
 getActivity :: TorrentSt -> STM Activity
@@ -233,7 +234,7 @@ beginVerifyingTorrent torst = do
     forkIO (verify 0)
     return ()
     where
-        verify :: Integer -> IO ()
+        verify :: PieceNum -> IO ()
         verify piecenum = do
             piece <- getPiece torst piecenum
             case piece of

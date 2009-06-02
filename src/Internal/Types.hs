@@ -3,13 +3,15 @@ module Internal.Types
     Session(..),
     TorrentSt(..),
     Torrent(..),
-    Activity(..)
+    Activity(..),
+    PieceNum
     ) where
 
 import Control.Concurrent.STM
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
+import Data.Int (Int32)
 
 -- | A Whiteout session. Contains various internal state.
 data Session = Session {
@@ -23,7 +25,7 @@ data TorrentSt = TorrentSt {
     path :: FilePath,
     -- | Is a given piece completed? For now (2009-05-24) this only reflects
     -- whether a piece's hash has been checked and found correct.
-    completion :: TArray Integer Bool,
+    completion :: TArray PieceNum Bool,
     activity :: TVar Activity
     }
 
@@ -38,7 +40,7 @@ data Torrent = Torrent {
     -- | Length of a piece in bytes.
     pieceLen :: Int,
     -- | Map piece numbers to their SHA-1 hashes.
-    pieceHashes :: Array Integer ByteString,
+    pieceHashes :: Array PieceNum ByteString,
     -- | Either the length of the single file or a list of filenames and their
     -- lengths.
     files :: Either Integer [(Integer, FilePath)],
@@ -51,3 +53,5 @@ data Activity =
     Stopped
   | Verifying
     deriving (Eq, Ord, Show)
+
+type PieceNum = Int32

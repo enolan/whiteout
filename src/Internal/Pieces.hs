@@ -14,10 +14,10 @@ import Internal.Types
 
 -- | Get a piece from a torrent. Returns 'Nothing' if the piece number is out of
 -- bounds.
-getPiece :: TorrentSt -> Integer -> IO (Maybe ByteString)
+getPiece :: TorrentSt -> PieceNum -> IO (Maybe ByteString)
 getPiece torst piecenum = let
     tor = torrent torst
-    offset = piecenum * (fromIntegral $ pieceLen $ torrent torst)
+    offset = (fromIntegral piecenum) * (fromIntegral $ pieceLen $ torrent torst)
     in
         C.catch
             (case files $ torrent torst of
