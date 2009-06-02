@@ -40,7 +40,8 @@ Executable runTests
                         test-framework-hunit, test-framework-quickcheck2
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
                         Internal.Pieces, Internal.Types, Network.Whiteout,
-                        Test.Internal.BEncode, Test.Network.Whiteout
+                        Test.ArbitraryInstances, Test.Internal.BEncode,
+                        Test.Network.Whiteout
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
     Extensions:         OverloadedStrings, StandaloneDeriving,

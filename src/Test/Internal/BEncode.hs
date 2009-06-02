@@ -13,6 +13,7 @@ import Test.QuickCheck
     (Arbitrary(..), Gen, elements, oneof, resize, sized)
 
 import Internal.BEncode
+import Test.ArbitraryInstances ()
 
 theTests :: Test
 theTests = testGroup "Internal.BEncode" [
@@ -37,13 +38,6 @@ genBEncode s = oneof
      fmap BString arbitrary,
      fmap BList (resize (s `div` 2) arbitrary),
      fmap BDict (resize (s `div` 2) arbitrary)]
-
-instance Arbitrary B.ByteString where
-    arbitrary = fmap B.pack arbitrary
-    shrink s = [B.take 20 s, B.drop 20 s]
-
-instance Arbitrary Word8 where
-    arbitrary = elements [minBound..maxBound]
 
 instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Map k v) where
     arbitrary = fmap M.fromList arbitrary
