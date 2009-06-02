@@ -6,11 +6,10 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Word (Word8)
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
-    (Arbitrary(..), Gen, elements, oneof, resize, sized)
+    (Arbitrary(..), Gen, oneof, resize, sized)
 
 import Internal.BEncode
 import Test.ArbitraryInstances ()

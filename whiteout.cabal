@@ -22,7 +22,7 @@ Library
                         parsec == 2.*, SHA == 1.4.*, stm == 2.*
     Exposed-modules:    Network.Whiteout
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
-                        Internal.Pieces, Internal.Types
+                        Internal.Peer, Internal.Pieces, Internal.Types
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
     Extensions:         OverloadedStrings, StandaloneDeriving,
@@ -38,9 +38,10 @@ Executable runTests
                         network == 2.*, parsec == 2.*, QuickCheck == 2.*,
                         SHA == 1.4.*, stm == 2.*, test-framework,
                         test-framework-hunit, test-framework-quickcheck2
-    Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
+    Other-modules:      Internal.BEncode, Internal.BEncode.Lexer, Internal.Peer,
                         Internal.Pieces, Internal.Types, Network.Whiteout,
                         Test.ArbitraryInstances, Test.Internal.BEncode,
+                        Test.Internal.Peer,
                         Test.Network.Whiteout
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
