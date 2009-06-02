@@ -29,9 +29,7 @@ Library
                         ScopedTypeVariables
 
 Executable runTests
-    if flag(test)
-        Buildable:          True
-    else
+    if !flag(test)
         Buildable:          False
     Main-is:            Test/runTests.hs
     Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
