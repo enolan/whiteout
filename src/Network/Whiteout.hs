@@ -53,7 +53,7 @@ loadTorrentFromFile = fmap loadTorrent . LBS.readFile
 loadTorrentFromURL ::
     String ->
     IO (Either LoadTorrentFromURLError Torrent)
-loadTorrentFromURL u = do
+loadTorrentFromURL u =
     case parseURI u of
         Just uri' -> do
             let req = mkRequest GET uri'
@@ -93,7 +93,7 @@ toTorrent benc = do
     pieceHashes' <- extractHashes pieceHashes
     name <- M.lookup "name" info >>= getString
     files <- getFiles info
-    (Just Torrent
+    Just Torrent
         {announce = announce,
          name = name,
          pieceLen = fromIntegral pieceLen,
@@ -103,7 +103,7 @@ toTorrent benc = do
                 pieceHashes',
          infohash = infohash,
          files = files
-        }) >>= checkLength
+        } >>= checkLength
     where
         --The get* could probably all be replaced with something using generics.
         getInt i = case i of
@@ -164,11 +164,11 @@ close _ = return ()
 -- as long as it has been 'addTorrent'ed; one can be simultaneous active and
 -- stopped - ready to go but not actually doing anything yet.
 getActiveTorrents :: Session -> STM (M.Map BS.ByteString TorrentSt)
-getActiveTorrents s = readTVar $ torrents s
+getActiveTorrents = readTVar . torrents
 
 -- | Is a given piece complete?
 isPieceComplete :: TorrentSt -> PieceNum -> STM Bool
-isPieceComplete torst = readArray (completion torst)
+isPieceComplete = readArray . completion
 
 getActivity :: TorrentSt -> STM Activity
 getActivity = readTVar . activity
@@ -244,7 +244,7 @@ beginVerifyingTorrent torst = do
                     -- TODO we need a real error logging mechanism.
                 Just piece' -> do
                     let
-                        expected = ((pieceHashes $ torrent torst) ! piecenum)
+                        expected = (pieceHashes $ torrent torst) ! piecenum
                         actual = BS.concat $ LBS.toChunks $ bytestringDigest $
                             sha1 $ LBS.fromChunks [piece']
                     if actual == expected
