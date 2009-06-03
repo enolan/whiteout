@@ -14,10 +14,12 @@ import Network.Whiteout
 theTests :: Test.Framework.Test
 theTests =
     testGroup "Network.Whiteout" [
-    testCase "verifySingleFileShouldSucceed" verifySingleFileShouldSucceed,
-    testCase "verifySingleFileShouldFail" verifySingleFileShouldFail,
-    testCase "verifyMultiFileShouldSucceed" verifyMultiFileShouldSucceed,
-    testCase "verifyMultiFileShouldFail" verifyMultiFileShouldFail
+        testGroup "verify" [
+            testCase "singleFileShouldSucceed" verifySingleFileShouldSucceed,
+            testCase "singleFileShouldFail" verifySingleFileShouldFail,
+            testCase "multiFileShouldSucceed" verifyMultiFileShouldSucceed,
+            testCase "multiFileShouldFail" verifyMultiFileShouldFail
+        ]
     ]
 
 loadTorWithAssert :: FilePath -> IO Torrent
