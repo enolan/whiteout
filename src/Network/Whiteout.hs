@@ -166,7 +166,6 @@ close _ = return ()
 getActiveTorrents :: Session -> STM (M.Map BS.ByteString TorrentSt)
 getActiveTorrents = readTVar . torrents
 
--- | Is a given piece complete?
 isPieceComplete :: TorrentSt -> PieceNum -> STM Bool
 isPieceComplete = readArray . completion
 
