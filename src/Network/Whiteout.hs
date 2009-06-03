@@ -227,12 +227,20 @@ addTorrent sess tor path = case files tor of
                 torsts' = M.insert (infohash tor) torst torsts
             writeTVar (torrents sess) torsts'
 
--- | Verify the hashes of a torrent. See also 'getActivity'.
-beginVerifyingTorrent :: TorrentSt -> IO ()
+-- | Launch a thread to asynchronously verify the hashes of a torrent.
+--
+-- If the torrent is not 'Stopped', this will return false and abort. Otherwise,
+-- it will set 'Activity' to 'Verifying', then back to 'Stopped' when the
+-- process is finished.
+beginVerifyingTorrent :: TorrentSt -> IO Bool
 beginVerifyingTorrent torst = do
-    atomically $ writeTVar (activity torst) Verifying
-    forkIO (verify 0)
-    return ()
+    a <- atomically $ getActivity torst
+    case a of
+        Stopped -> do
+            atomically $ writeTVar (activity torst) Verifying
+            forkIO (verify 0)
+            return True
+        _ -> return False
     where
         verify :: PieceNum -> IO ()
         verify piecenum = do
