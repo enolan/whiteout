@@ -78,7 +78,6 @@ addPeer sess torst h p = (forkIO go) >> return ()
             sendHandshake sess torst s
             peerHandler torst s
 
-
 peerHandler :: TorrentSt -> Socket -> IO ()
 peerHandler torst s = do
     return ()
@@ -89,4 +88,3 @@ sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
     resByte5 = 0, resByte6 = 0, resByte7 = 0,
     infoHash = infohash $ torrent torst,
     Internal.Peer.Handshake.peerId = Internal.Types.peerId sess} -- Ugh.
-
