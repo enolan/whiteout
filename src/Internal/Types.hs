@@ -16,7 +16,8 @@ import Data.Int (Int32)
 -- | A Whiteout session. Contains various internal state.
 data Session = Session {
     -- | Map from infohashes to torrents.
-    torrents :: TVar (M.Map ByteString TorrentSt)
+    torrents :: TVar (M.Map ByteString TorrentSt),
+    peerId :: ByteString
     }
 
 -- | The state of a torrent.

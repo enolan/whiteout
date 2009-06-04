@@ -19,7 +19,8 @@ module Network.Whiteout
     isPieceComplete,
     getActivity,
     addTorrent,
-    beginVerifyingTorrent
+    beginVerifyingTorrent,
+    addPeer
     ) where
 
 import Data.Array.IArray ((!), bounds, listArray)
@@ -29,8 +30,11 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as LBS
 import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import qualified Data.Map as M
+import Data.Maybe (fromMaybe)
+import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
+import Control.Monad (replicateM)
 import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
@@ -38,8 +42,10 @@ import System.Directory
     (Permissions(..), doesDirectoryExist, doesFileExist, getPermissions)
 import System.FilePath ((</>), joinPath)
 import System.IO
+import System.Random
 
 import Internal.BEncode
+import Internal.Peer (addPeer)
 import Internal.Pieces
 import Internal.Types
 
@@ -150,10 +156,23 @@ toTorrent benc = do
                 else Nothing
 
 -- This should eventually take more arguments. At least a port to listen on.
-initialize :: IO Session
-initialize = atomically $ do
-    torrents <- newTVar M.empty
-    return Session { torrents = torrents }
+initialize :: Maybe (BS.ByteString)
+    -- ^ Your client name and version. Must be exactly two characters, followed
+    -- by four numbers. E.g. Azureus uses AZ2060.
+    --
+    -- See <http://wiki.theory.org/BitTorrentSpecification#peer_id> for a
+    -- directory. If you pass 'Nothing', we'll use WO and the whiteout version.
+    -> IO Session
+initialize name = do
+    peerId <- genPeerId $ fromMaybe "WO0001" name
+    atomically $ do
+        torrents <- newTVar M.empty
+        return Session { torrents = torrents, peerId = peerId }
+
+genPeerId :: BS.ByteString -> IO BS.ByteString
+genPeerId nameandver = do
+    randompart <- BSC.pack <$> (replicateM 20 $ randomRIO ('0','9'))
+    return $ BS.concat ["-", nameandver, "-", randompart]
 
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
 -- Run this before exiting.

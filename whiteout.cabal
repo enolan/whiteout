@@ -19,7 +19,8 @@ Library
     Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
                         containers, directory == 1.*, filepath == 1.*,
                         HTTP >= 4000.0.5 && < 4000.1, network == 2.*,
-                        parsec == 2.*, SHA == 1.4.*, stm == 2.*
+                        network-bytestring == 0.1.*, parsec == 2.*,
+                        random == 1.0.*, SHA == 1.4.*, stm == 2.*
     Exposed-modules:    Network.Whiteout
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
                         Internal.Peer, Internal.Peer.Handshake, Internal.Pieces,
@@ -36,7 +37,8 @@ Executable runTests
     Build-depends:      array, base ==4.*, binary, bytestring, bytestring-show,
                         containers, directory == 1.*, filepath == 1.*,
                         HTTP >= 4000.0.5 && < 4000.1, HUnit == 1.2.*,
-                        network == 2.*, parsec == 2.*, QuickCheck == 2.*,
+                        network == 2.*, network-bytestring == 0.1.*,
+                        parsec == 2.*, QuickCheck == 2.*, random == 1.0.*,
                         SHA == 1.4.*, stm == 2.*, test-framework,
                         test-framework-hunit, test-framework-quickcheck2
     Other-modules:      Internal.BEncode, Internal.BEncode.Lexer, Internal.Peer,

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- This module exists so we can quickcheck the binary instance without exposing
 -- Handshake from Internal.Peer.
 module Internal.Peer.Handshake (Handshake(..)) where

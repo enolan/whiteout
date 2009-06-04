@@ -1,4 +1,8 @@
-module Internal.Peer where
+module Internal.Peer
+    (
+    PeerMsg(..),
+    addPeer
+    ) where
 
 import Data.Binary
 import Data.Binary.Get (getByteString, remaining)
@@ -7,8 +11,13 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Int (Int32)
 import Control.Applicative
+import Control.Concurrent (forkIO)
 import Control.Monad (liftM3)
+import Network.Socket
+import qualified Network.Socket.ByteString as SB
+import qualified Network.Socket.ByteString.Lazy as SBL
 
+import Internal.Peer.Handshake
 import Internal.Types
 
 data PeerMsg =
@@ -55,3 +64,29 @@ instance Binary PeerMsg where
                 return $ Piece n off bs
             8 -> liftM3 Cancel get get get
             _ -> error "Invalid interpeer message, couldn't read tag."
+
+-- | Connect to a new peer. Later this should add them to a queue and another
+-- thread should empty the queue with a limit on the max open/half-open
+-- connections.
+addPeer :: Session -> TorrentSt -> String -> PortNumber -> IO ()
+addPeer sess torst h p = (forkIO go) >> return ()
+    where
+        go = do
+            s <- socket AF_INET Stream 0
+            addr <- inet_addr h
+            connect s $ SockAddrInet p addr
+            sendHandshake sess torst s
+            peerHandler torst s
+
+
+peerHandler :: TorrentSt -> Socket -> IO ()
+peerHandler torst s = do
+    return ()
+
+sendHandshake :: Session -> TorrentSt -> Socket -> IO ()
+sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
+    resByte0 = 0, resByte1 = 0, resByte2 = 0, resByte3 = 0, resByte4 = 0,
+    resByte5 = 0, resByte6 = 0, resByte7 = 0,
+    infoHash = infohash $ torrent torst,
+    Internal.Peer.Handshake.peerId = Internal.Types.peerId sess} -- Ugh.
+

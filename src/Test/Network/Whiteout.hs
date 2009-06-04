@@ -38,7 +38,7 @@ addTorWithAssert sess tor path = do
 
 verifyGeneric :: FilePath -> FilePath -> Bool -> Assertion
 verifyGeneric torpath datapath expectedResult = do
-    sess <- initialize
+    sess <- initialize Nothing
     tor <- loadTorWithAssert torpath
     torst <- addTorWithAssert sess tor datapath
     beginVerifyingTorrent torst
