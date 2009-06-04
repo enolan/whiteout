@@ -23,18 +23,18 @@ module Network.Whiteout
     addPeer
     ) where
 
-import Data.Array.IArray ((!), bounds, listArray)
-import Data.Array.MArray (newArray, readArray, writeArray)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSC
-import qualified Data.ByteString.Lazy as LBS
-import Data.Digest.Pure.SHA (bytestringDigest, sha1)
-import qualified Data.Map as M
-import Data.Maybe (fromMaybe)
 import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Monad (replicateM)
+import Data.Array.IArray ((!), bounds, listArray)
+import Data.Array.MArray (newArray, readArray, writeArray)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy as L
+import Data.Digest.Pure.SHA (bytestringDigest, sha1)
+import qualified Data.Map as M
+import Data.Maybe (fromMaybe)
 import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
@@ -53,7 +53,7 @@ import Internal.Types
 -- | Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
 -- valid torrent. Throws an exception if the file can't be opened.
 loadTorrentFromFile :: FilePath -> IO (Maybe Torrent)
-loadTorrentFromFile = fmap loadTorrent . LBS.readFile
+loadTorrentFromFile = fmap loadTorrent . L.readFile
 
 -- | Load a torrent from a URL.
 loadTorrentFromURL ::
@@ -81,9 +81,9 @@ data LoadTorrentFromURLError =
     | NotATorrent
     deriving (Show, Eq)
 
--- | Load a torrent from a 'LBS.ByteString'. Returns 'Nothing' if the parameter
+-- | Load a torrent from a 'L.ByteString'. Returns 'Nothing' if the parameter
 -- is not a valid torrent.
-loadTorrent :: LBS.ByteString -> Maybe Torrent
+loadTorrent :: L.ByteString -> Maybe Torrent
 loadTorrent bs = bRead bs >>= toTorrent
 
 toTorrent :: BEncode -> Maybe Torrent
@@ -92,7 +92,7 @@ toTorrent benc = do
     announce <- M.lookup "announce" dict >>= getString
     info <- M.lookup "info" dict >>= getDict
     let
-        infohash = BS.concat $ LBS.toChunks $ bytestringDigest $ sha1 $ bPack $
+        infohash = B.concat $ L.toChunks $ bytestringDigest $ sha1 $ bPack $
             BDict info
     pieceLen <- M.lookup "piece length" info >>= getInt
     pieceHashes <- M.lookup "pieces" info >>= getString
@@ -105,7 +105,7 @@ toTorrent benc = do
          pieceLen = fromIntegral pieceLen,
          pieceHashes =
             listArray
-                (0,(fromIntegral $ BS.length pieceHashes `div` 20) - 1)
+                (0,(fromIntegral $ B.length pieceHashes `div` 20) - 1)
                 pieceHashes',
          infohash = infohash,
          files = files
@@ -124,12 +124,12 @@ toTorrent benc = do
         getDict d = case d of
             BDict d' -> Just d'
             _        -> Nothing
-        extractHashes hs = if (BS.length hs `mod` 20) == 0
+        extractHashes hs = if (B.length hs `mod` 20) == 0
             then Just $ groupHashes hs
             else Nothing
-        groupHashes hs = if BS.null hs
+        groupHashes hs = if B.null hs
             then []
-            else let (hash, rest) = BS.splitAt 20 hs in hash : groupHashes rest
+            else let (hash, rest) = B.splitAt 20 hs in hash : groupHashes rest
         getFiles i = let
             length = M.lookup "length" i >>= getInt
             files  = M.lookup "files" i >>= getList
@@ -143,7 +143,7 @@ toTorrent benc = do
             d' <- getDict d
             length <- M.lookup "length" d' >>= getInt
             path <- M.lookup "path" d' >>= getList >>= mapM getString
-            let path' = joinPath $ map BSC.unpack path
+            let path' = joinPath $ map BC.unpack path
             Just (length,path')
         checkLength t = let
             len = either id (sum . map fst) $ files t
@@ -156,7 +156,7 @@ toTorrent benc = do
                 else Nothing
 
 -- This should eventually take more arguments. At least a port to listen on.
-initialize :: Maybe (BS.ByteString)
+initialize :: Maybe (B.ByteString)
     -- ^ Your client name and version. Must be exactly two characters, followed
     -- by four numbers. E.g. Azureus uses AZ2060.
     --
@@ -169,10 +169,10 @@ initialize name = do
         torrents <- newTVar M.empty
         return Session { torrents = torrents, peerId = peerId }
 
-genPeerId :: BS.ByteString -> IO BS.ByteString
+genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
-    randompart <- BSC.pack <$> (replicateM 20 $ randomRIO ('0','9'))
-    return $ BS.concat ["-", nameandver, "-", randompart]
+    randompart <- BC.pack <$> (replicateM 20 $ randomRIO ('0','9'))
+    return $ B.concat ["-", nameandver, "-", randompart]
 
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
 -- Run this before exiting.
@@ -182,7 +182,7 @@ close _ = return ()
 -- | Get the currently active torrents, keyed by infohash. A torrent is active
 -- as long as it has been 'addTorrent'ed; one can be simultaneous active and
 -- stopped - ready to go but not actually doing anything yet.
-getActiveTorrents :: Session -> STM (M.Map BS.ByteString TorrentSt)
+getActiveTorrents :: Session -> STM (M.Map B.ByteString TorrentSt)
 getActiveTorrents = readTVar . torrents
 
 isPieceComplete :: TorrentSt -> PieceNum -> STM Bool
@@ -271,8 +271,8 @@ beginVerifyingTorrent torst = do
                 Just piece' -> do
                     let
                         expected = (pieceHashes $ torrent torst) ! piecenum
-                        actual = BS.concat $ LBS.toChunks $ bytestringDigest $
-                            sha1 $ LBS.fromChunks [piece']
+                        actual = B.concat $ L.toChunks $ bytestringDigest $
+                            sha1 $ L.fromChunks [piece']
                     if actual == expected
                         then atomically $
                             writeArray (completion torst) piecenum True
