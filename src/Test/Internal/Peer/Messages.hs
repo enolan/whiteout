@@ -30,8 +30,8 @@ instance Arbitrary Handshake where
             resByte0 = resByte0, resByte1 = resByte1, resByte2 = resByte2,
             resByte3 = resByte3, resByte4 = resByte4, resByte5 = resByte5,
             resByte6 = resByte6, resByte7 = resByte7,
-            infoHash = infoHash,
-            peerId = peerId
+            hInfoHash = infoHash,
+            hPeerId = peerId
             }
 
 peerMsgRoundTrip :: PeerMsg -> Bool

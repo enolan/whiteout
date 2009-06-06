@@ -107,7 +107,7 @@ toTorrent benc = do
             listArray
                 (0,(fromIntegral $ B.length pieceHashes `div` 20) - 1)
                 pieceHashes',
-         infohash = infohash,
+         tInfohash = infohash,
          files = files
         } >>= checkLength
     where
@@ -167,7 +167,7 @@ initialize name = do
     peerId <- genPeerId $ fromMaybe "WO0001" name
     atomically $ do
         torrents <- newTVar M.empty
-        return Session { torrents = torrents, peerId = peerId }
+        return Session { torrents = torrents, sPeerId = peerId }
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
@@ -242,7 +242,7 @@ addTorrent sess tor path = case files tor of
                     completion = completion,
                     activity = activity
                     }
-                torsts' = M.insert (infohash tor) torst torsts
+                torsts' = M.insert (tInfohash tor) torst torsts
             writeTVar (torrents sess) torsts'
 
 -- | Launch a thread to asynchronously verify the hashes of a torrent.

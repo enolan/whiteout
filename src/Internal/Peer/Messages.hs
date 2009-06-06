@@ -28,8 +28,8 @@ data Handshake = Handshake {
     resByte5 :: Word8,
     resByte6 :: Word8,
     resByte7 :: Word8,
-    infoHash :: B.ByteString,
-    peerId :: B.ByteString
+    hInfoHash :: B.ByteString,
+    hPeerId :: B.ByteString
     } deriving (Show, Eq)
 
 instance Binary Handshake where
@@ -39,8 +39,8 @@ instance Binary Handshake where
         sequence_ $ map put $ map ($h)
             [resByte0, resByte1, resByte2, resByte3, resByte4, resByte5,
              resByte6, resByte7]
-        putByteString $ infoHash h
-        putByteString $ Internal.Peer.Messages.peerId h
+        putByteString $ hInfoHash h
+        putByteString $ hPeerId h
     get = do
         (l :: Word8) <- get
         if l == 19 then return () else error "bad handshake (length byte)"
@@ -56,8 +56,8 @@ instance Binary Handshake where
             resByte0 = resByte0, resByte1 = resByte1, resByte2 = resByte2,
             resByte3 = resByte3, resByte4 = resByte4, resByte5 = resByte5,
             resByte6 = resByte6, resByte7 = resByte7,
-            infoHash = infoHash,
-            Internal.Peer.Messages.peerId = peerId
+            hInfoHash = infoHash,
+            hPeerId = peerId
             }
 
 data PeerMsg =

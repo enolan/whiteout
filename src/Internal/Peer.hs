@@ -33,5 +33,5 @@ sendHandshake :: Session -> TorrentSt -> Socket -> IO ()
 sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
     resByte0 = 0, resByte1 = 0, resByte2 = 0, resByte3 = 0, resByte4 = 0,
     resByte5 = 0, resByte6 = 0, resByte7 = 0,
-    infoHash = infohash $ torrent torst,
-    Internal.Peer.Messages.peerId = Internal.Types.peerId sess} -- Ugh.
+    hInfoHash = tInfohash $ torrent torst,
+    hPeerId = sPeerId sess}

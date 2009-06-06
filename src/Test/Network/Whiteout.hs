@@ -32,7 +32,7 @@ addTorWithAssert :: Session -> Torrent -> FilePath -> IO TorrentSt
 addTorWithAssert sess tor path = do
     res <- addTorrent sess tor path
     assertBool "adding failed" res
-    torst <- M.lookup (infohash tor) <$> (atomically $ getActiveTorrents sess)
+    torst <- M.lookup (tInfohash tor) <$> (atomically $ getActiveTorrents sess)
     assertBool "Couldn't find TorrentSt" $ isJust torst
     return $ fromJust torst
 

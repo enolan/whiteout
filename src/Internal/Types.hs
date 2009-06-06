@@ -17,7 +17,7 @@ import Data.Word (Word32)
 data Session = Session {
     -- | Map from infohashes to torrents.
     torrents :: TVar (M.Map ByteString TorrentSt),
-    peerId :: ByteString
+    sPeerId :: ByteString
     }
 
 -- | The state of a torrent.
@@ -46,7 +46,7 @@ data Torrent = Torrent {
     -- lengths.
     files :: Either Integer [(Integer, FilePath)],
     -- | SHA-1 of the bencoded info dictionary.
-    infohash :: ByteString
+    tInfohash :: ByteString
     } deriving (Show)
 
 -- | What is being done with a torrent at a given moment.
