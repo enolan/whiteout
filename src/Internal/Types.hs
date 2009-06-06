@@ -11,7 +11,7 @@ import Control.Concurrent.STM
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
-import Data.Int (Int32)
+import Data.Word (Word32)
 
 -- | A Whiteout session. Contains various internal state.
 data Session = Session {
@@ -55,4 +55,4 @@ data Activity =
   | Verifying
     deriving (Eq, Ord, Show)
 
-type PieceNum = Int32
+type PieceNum = Word32

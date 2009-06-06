@@ -8,7 +8,7 @@ import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
 
-import Test.ArbitraryInstances
+import Test.ArbitraryInstances ()
 import Internal.Peer.Messages
 
 theTests :: Test
@@ -43,12 +43,11 @@ instance Arbitrary PeerMsg where
         return Unchoke,
         return Interested,
         return NotInterested,
-        Have <$> arbitraryPosInt32,
+        Have <$> arbitrary,
         Bitfield <$> arbitrary,
-        Request <$>
-            arbitraryPosInt32 <*> arbitraryPosInt32 <*> arbitraryPosInt32,
-        Piece <$> arbitraryPosInt32 <*> arbitraryPosInt32 <*> arbitrary,
-        Cancel <$> arbitraryPosInt32 <*> arbitraryPosInt32 <*> arbitraryPosInt32
+        Request <$> arbitrary <*> arbitrary <*> arbitrary,
+        Piece <$> arbitrary <*> arbitrary <*> arbitrary,
+        Cancel <$> arbitrary <*> arbitrary <*> arbitrary
         ]
 
 instance Applicative Gen where

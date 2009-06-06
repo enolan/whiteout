@@ -15,8 +15,7 @@ import Data.Binary.Get (getByteString, remaining)
 import Data.Binary.Put (putByteString)
 import qualified Data.ByteString as B
 import Data.ByteString.Char8 () -- isString instance
-import Data.Int (Int32)
-import Data.Word (Word8)
+import Data.Word (Word8, Word32)
 
 import Internal.Types
 
@@ -68,9 +67,9 @@ data PeerMsg =
   | NotInterested
   | Have PieceNum
   | Bitfield B.ByteString
-  | Request PieceNum Int32 Int32
-  | Piece PieceNum Int32 B.ByteString
-  | Cancel PieceNum Int32 Int32
+  | Request PieceNum Word32 Word32
+  | Piece PieceNum Word32 B.ByteString
+  | Cancel PieceNum Word32 Word32
     deriving (Show, Eq)
 
 instance Binary PeerMsg where

@@ -1,10 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.ArbitraryInstances where
 
-import Control.Applicative
 import qualified Data.ByteString as B
-import Data.Int (Int32)
-import Data.Word (Word8)
+import Data.Word (Word8, Word32)
+import System.Random
 import Test.QuickCheck
 
 instance Arbitrary B.ByteString where
@@ -13,7 +12,19 @@ instance Arbitrary B.ByteString where
         (a, b) -> [a,b]
 
 instance Arbitrary Word8 where
-    arbitrary = elements [minBound..maxBound]
+    arbitrary = choose (minBound, maxBound)
 
-arbitraryPosInt32 :: Gen Int32
-arbitraryPosInt32 = fromIntegral <$> (arbitrary :: Gen Int) `suchThat` (>=0)
+instance Random Word8 where
+    randomR (low, high) g =
+        case randomR ((fromIntegral low) :: Integer, fromIntegral high) g of
+            (val, gen) -> (fromIntegral val, gen)
+    random g = randomR (minBound, maxBound) g
+
+instance Arbitrary Word32 where
+    arbitrary = choose (minBound, maxBound)
+
+instance Random Word32 where
+    randomR (low, high) g =
+        case randomR ((fromIntegral low) :: Integer, fromIntegral high) g of
+            (val, gen) -> (fromIntegral val, gen)
+    random g = randomR (minBound, maxBound) g
