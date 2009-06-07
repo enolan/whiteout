@@ -8,8 +8,8 @@ import Control.Concurrent (forkIO)
 import Data.Array.IArray (bounds)
 import Data.Binary
 import Data.Binary.Put
-import Data.ByteString as B
-import Data.ByteString.Lazy as L
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
 import Data.Maybe (fromJust)
 import Network.Socket
 import qualified Network.Socket.ByteString as SB
