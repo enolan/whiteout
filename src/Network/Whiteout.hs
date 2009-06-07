@@ -171,7 +171,7 @@ initialize name = do
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
-    randompart <- BC.pack <$> (replicateM 20 $ randomRIO ('0','9'))
+    randompart <- BC.pack <$> (replicateM 12 $ randomRIO ('0','9'))
     return $ B.concat ["-", nameandver, "-", randompart]
 
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
