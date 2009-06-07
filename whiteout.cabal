@@ -27,8 +27,7 @@ Library
                         Internal.Types
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
-    Extensions:         OverloadedStrings, StandaloneDeriving,
-                        ScopedTypeVariables
+    Extensions:         OverloadedStrings, ScopedTypeVariables
 
 Executable runTests
     if !flag(test)
@@ -48,5 +47,4 @@ Executable runTests
                         Test.Internal.Peer.Messages, Test.Network.Whiteout
     Hs-source-dirs:     src
     Ghc-options:        -Wall -fno-warn-name-shadowing
-    Extensions:         OverloadedStrings, StandaloneDeriving,
-                        ScopedTypeVariables
+    Extensions:         OverloadedStrings, ScopedTypeVariables
