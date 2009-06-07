@@ -2,6 +2,7 @@
 module Test.Internal.Peer.Messages (theTests) where
 
 import Control.Applicative
+import Control.Monad (replicateM)
 import Data.Binary
 import qualified Data.ByteString as B
 import Test.Framework
@@ -23,10 +24,10 @@ handshakeRoundTrip h = (decode $ encode h) == h
 instance Arbitrary Handshake where
     arbitrary = do
         [resByte0, resByte1, resByte2, resByte3, resByte4, resByte5, resByte6,
-         resByte7] <- sequence $ replicate 8 arbitrary
+         resByte7] <- replicateM 8 arbitrary
         infoHash <- B.pack <$> vectorOf 20 arbitrary
         peerId <- B.pack <$> vectorOf 20 arbitrary
-        return $ Handshake {
+        return Handshake {
             resByte0 = resByte0, resByte1 = resByte1, resByte2 = resByte2,
             resByte3 = resByte3, resByte4 = resByte4, resByte5 = resByte5,
             resByte6 = resByte6, resByte7 = resByte7,

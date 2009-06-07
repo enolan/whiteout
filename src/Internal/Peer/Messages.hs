@@ -9,7 +9,7 @@ module Internal.Peer.Messages
     where
 
 import Control.Applicative
-import Control.Monad (liftM3)
+import Control.Monad (liftM3, replicateM)
 import Data.Binary
 import Data.Binary.Get (getByteString, remaining)
 import Data.Binary.Put (putByteString)
@@ -36,7 +36,7 @@ instance Binary Handshake where
     put h = do
         put (19 :: Word8)
         putByteString "BitTorrent protocol"
-        sequence_ $ map put $ map ($h)
+        mapM_ (put . ($h))
             [resByte0, resByte1, resByte2, resByte3, resByte4, resByte5,
              resByte6, resByte7]
         putByteString $ hInfoHash h
@@ -49,10 +49,10 @@ instance Binary Handshake where
             then return ()
             else error "bad handshake (protocol name)"
         [resByte0, resByte1, resByte2, resByte3, resByte4, resByte5, resByte6,
-         resByte7] <- sequence $ replicate 8 get
+         resByte7] <- replicateM 8 get
         infoHash <- getByteString 20
         peerId <- getByteString 20
-        return $ Handshake {
+        return Handshake {
             resByte0 = resByte0, resByte1 = resByte1, resByte2 = resByte2,
             resByte3 = resByte3, resByte4 = resByte4, resByte5 = resByte5,
             resByte6 = resByte6, resByte7 = resByte7,

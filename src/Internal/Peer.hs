@@ -6,6 +6,7 @@ module Internal.Peer
 import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Exception
+import Control.Monad (when)
 import Data.Array.IArray (bounds)
 import Data.Binary
 import Data.Binary.Put
@@ -27,18 +28,18 @@ import Internal.Types
 addPeer :: Session -> TorrentSt -> String -> PortNumber -> IO ()
 addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
     where
-        go = bracket (socket AF_INET Stream 0) (sClose) $ \s-> do
+        go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
             addr <- inet_addr h
             connect s $ SockAddrInet p addr
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             print theirHandshake
             let
-                numPieces = snd $ bounds $ pieceHashes $ torrent $ torst
+                numPieces = snd $ bounds $ pieceHashes $ torrent torst
                 (quot, rem) = quotRem numPieces 8
                 bitFieldLen = fromIntegral $ if rem /= 0 then quot+1 else quot
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
-            sendPeerMsg s $ Unchoke
+            sendPeerMsg s Unchoke
             peerHandler torst s
         handlers = [
             Handler (\(e :: IOException) -> print e),
@@ -49,20 +50,18 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
 peerHandler :: TorrentSt -> Socket -> IO ()
 peerHandler torst s = do
     msgLen :: Word32 <- decode <$> recvAll s 4
-    if msgLen > 0
-        then do
-            msg <- decode <$> recvAll s (fromIntegral msgLen)
-            case msg of
-                it@(Request pn offset len) -> do
-                    print it
-                    dataToSend <-
-                        (B.take (fromIntegral len) .
-                            B.drop (fromIntegral offset)) <$>
-                        fromJust <$> getPiece torst pn
-                    let msgToSend = Piece pn offset dataToSend
-                    sendPeerMsg s msgToSend
-                other -> print other
-        else return () -- Keepalive
+    when (msgLen > 0) $ do
+        msg <- decode <$> recvAll s (fromIntegral msgLen)
+        case msg of
+            it@(Request pn offset len) -> do
+                print it
+                dataToSend <-
+                    (B.take (fromIntegral len) .
+                        B.drop (fromIntegral offset)) <$>
+                    fromJust <$> getPiece torst pn
+                let msgToSend = Piece pn offset dataToSend
+                sendPeerMsg s msgToSend
+            other -> print other
     peerHandler torst s
 
 sendHandshake :: Session -> TorrentSt -> Socket -> IO ()
@@ -86,7 +85,7 @@ recvAll s numBytes = do
     case False of
         _ | count == 0 -> error "recvAll: couldn't get sufficient bytes"
           | count < numBytes -> do
-                rest <- recvAll s (numBytes - (fromIntegral count))
+                rest <- recvAll s (numBytes - fromIntegral count)
                 return $ L.append whatWeGot rest
           | count == numBytes -> return whatWeGot
           | otherwise -> error "recvAll: the impossible happened"
