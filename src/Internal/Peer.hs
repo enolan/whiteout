@@ -49,6 +49,8 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
 -- PeerMsg handling loop
 peerHandler :: TorrentSt -> Socket -> IO ()
 peerHandler torst s = do
+-- This whole thing makes (way too many?) more syscalls than necessary.
+-- Could/should do some buffering scheme. Do Iteratees apply here?
     msgLen :: Word32 <- decode <$> recvAll s 4
     when (msgLen > 0) $ do
         msg <- decode <$> recvAll s (fromIntegral msgLen)
