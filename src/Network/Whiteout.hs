@@ -186,14 +186,15 @@ getActivity = readTVar . activity
 
 -- | Add a torrent to a running session for seeding/checking. Since we only
 -- support seeding at present, this requires the files be in place and of the
--- correct size. Returns 'True' on success.
-addTorrent :: Session -> Torrent -> FilePath -> IO Bool
+-- correct size. If this is not the case, throws 'BadFiles'. Returns the
+-- TorrentSt added, for convenience.
+addTorrent :: Session -> Torrent -> FilePath -> IO TorrentSt
 addTorrent sess tor path = case files tor of
     Left len -> do
         ok <- checkFile (len,path)
         if ok
-            then atomically addTorrent' >> return True
-            else return False
+            then atomically addTorrent'
+            else throw BadFiles
     Right fs -> do
         e <- doesDirectoryExist path
         if e
@@ -201,12 +202,12 @@ addTorrent sess tor path = case files tor of
                 p <- getPermissions path
                 if readable p
                     then do
-                        ok <- fmap and $ mapM (checkFile . addprefix) fs
+                        ok <- and <$> mapM (checkFile . addprefix) fs
                         if ok
-                            then atomically addTorrent' >> return True
-                            else return False
-                    else return False
-            else return False
+                            then atomically addTorrent'
+                            else throw BadFiles
+                    else throw BadFiles
+            else throw BadFiles
     where
         addprefix (l,p) = (l, path </> p)
         checkFile :: (Integer, FilePath) -> IO Bool
@@ -223,7 +224,7 @@ addTorrent sess tor path = case files tor of
                                 else return False
                         else return False
                 else return False
-        addTorrent' :: STM ()
+        addTorrent' :: STM TorrentSt
         addTorrent' = do
             torsts <- readTVar $ torrents sess
             completion <- newArray (bounds $ pieceHashes tor) False
@@ -233,10 +234,10 @@ addTorrent sess tor path = case files tor of
                     torrent = tor,
                     path = path,
                     completion = completion,
-                    activity = activity
-                    }
+                    activity = activity }
                 torsts' = M.insert (tInfohash tor) torst torsts
             writeTVar (torrents sess) torsts'
+            return torst
 
 -- | Launch a thread to asynchronously verify the hashes of a torrent.
 --
@@ -283,6 +284,7 @@ data WhiteoutException =
   | BadState
   -- ^ Tried to perform some action on a torrent precluded by the current state
   -- of the torrent. E.g. Tried to verify a torrent that is already Verifying.
+  | BadFiles
     deriving (Show, Typeable, Eq)
 
 instance Exception WhiteoutException

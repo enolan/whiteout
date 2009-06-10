@@ -22,19 +22,11 @@ theTests =
         ]
     ]
 
-addTorWithAssert :: Session -> Torrent -> FilePath -> IO TorrentSt
-addTorWithAssert sess tor path = do
-    res <- addTorrent sess tor path
-    assertBool "adding failed" res
-    torst <- M.lookup (tInfohash tor) <$> (atomically $ getActiveTorrents sess)
-    assertBool "Couldn't find TorrentSt" $ isJust torst
-    return $ fromJust torst
-
 verifyGeneric :: FilePath -> FilePath -> Bool -> Assertion
 verifyGeneric torpath datapath expectedResult = do
     sess <- initialize Nothing
     tor <- loadTorrentFromFile torpath
-    torst <- addTorWithAssert sess tor datapath
+    torst <- addTorrent sess tor datapath
     beginVerifyingTorrent torst
     atomically $ do
         activity <- getActivity torst
