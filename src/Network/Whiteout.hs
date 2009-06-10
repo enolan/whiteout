@@ -5,7 +5,6 @@ module Network.Whiteout
     PieceNum,
     loadTorrentFromFile,
     loadTorrentFromURL,
-    LoadTorrentFromURLError(..),
     loadTorrent,
 -- *Whiteout state
     Session(),
@@ -21,12 +20,15 @@ module Network.Whiteout
 -- *Operations on torrents
     addTorrent,
     beginVerifyingTorrent,
-    addPeer
+    addPeer,
+-- *Miscellany
+    WhiteoutException(..)
     ) where
 
 import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
+import Control.Exception as C
 import Control.Monad (replicateM)
 import Data.Array.IArray ((!), bounds, listArray)
 import Data.Array.MArray (newArray, readArray, writeArray)
@@ -36,6 +38,7 @@ import qualified Data.ByteString.Lazy as L
 import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import Data.Typeable
 import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
@@ -51,41 +54,30 @@ import Internal.Pieces
 import Internal.Types
 
 
--- | Load a torrent from a file. Returns 'Nothing' if the file doesn't contain a
--- valid torrent. Throws an exception if the file can't be opened.
-loadTorrentFromFile :: FilePath -> IO (Maybe Torrent)
+-- | Load a torrent from a file. May throw 'CouldntParseTorrent' or some
+-- 'IOException' resulting from trying to read the file.
+loadTorrentFromFile :: FilePath -> IO Torrent
 loadTorrentFromFile = fmap loadTorrent . L.readFile
 
--- | Load a torrent from a URL.
-loadTorrentFromURL ::
-    String ->
-    IO (Either LoadTorrentFromURLError Torrent)
+-- | Load a torrent from a URL. May throw 'CouldntParseTorrent',
+-- 'HTTPDownloadFailed' or 'CouldntParseURL'.
+loadTorrentFromURL :: String -> IO Torrent
 loadTorrentFromURL u =
     case parseURI u of
         Just uri' -> do
             let req = mkRequest GET uri'
             res <- simpleHTTP req
             case res of
-                Left _  -> return $ Left DownloadFailed
-                Right r -> return $ case loadTorrent $ rspBody r of
-                    Just t  -> Right t
-                    Nothing -> Left NotATorrent
-        Nothing   -> return $ Left URLInvalid
+                Left _  -> throw HTTPDownloadFailed
+                Right r -> return $ loadTorrent $ rspBody r
+        Nothing   -> throw CouldntParseURL
 
--- | Things that could go wrong downloading and loading a torrent.
-data LoadTorrentFromURLError =
-    -- | Download failed.
-      DownloadFailed
-    -- | URL was invalid.
-    | URLInvalid
-    -- | Download succeeded, but what we got was not a torrent.
-    | NotATorrent
-    deriving (Show, Eq)
-
--- | Load a torrent from a 'L.ByteString'. Returns 'Nothing' if the parameter
--- is not a valid torrent.
-loadTorrent :: L.ByteString -> Maybe Torrent
-loadTorrent bs = bRead bs >>= toTorrent
+-- | Load a torrent from a 'L.ByteString'. May throw a 'CouldntParseTorrent'
+-- exception.
+loadTorrent :: L.ByteString -> Torrent
+loadTorrent bs = case bRead bs >>= toTorrent of
+    Just x -> x
+    Nothing -> throw CouldntParseTorrent
 
 toTorrent :: BEncode -> Maybe Torrent
 toTorrent benc = do
@@ -248,18 +240,19 @@ addTorrent sess tor path = case files tor of
 
 -- | Launch a thread to asynchronously verify the hashes of a torrent.
 --
--- If the torrent is not 'Stopped', this will return false and abort. Otherwise,
--- it will set 'Activity' to 'Verifying', then back to 'Stopped' when the
--- process is finished.
-beginVerifyingTorrent :: TorrentSt -> IO Bool
+-- The torrent must be 'Stopped' before calling this, otherwise a 'BadState'
+-- exception will be thrown. When the verifier thread starts, the torrent's
+-- 'Activity' will be 'Verifying'; when it finishes it will set it back to
+-- 'Stopped'.
+beginVerifyingTorrent :: TorrentSt -> IO ()
 beginVerifyingTorrent torst = do
     a <- atomically $ getActivity torst
     case a of
         Stopped -> do
             atomically $ writeTVar (activity torst) Verifying
             forkIO (verify 0)
-            return True
-        _ -> return False
+            return ()
+        _ -> throw BadState
     where
         verify :: PieceNum -> IO ()
         verify piecenum = do
@@ -282,3 +275,14 @@ beginVerifyingTorrent torst = do
                     if piecenum == (snd $ bounds $ pieceHashes $ torrent torst)
                         then atomically $ writeTVar (activity torst) Stopped
                         else verify (piecenum+1)
+
+data WhiteoutException =
+    CouldntParseTorrent
+  | HTTPDownloadFailed
+  | CouldntParseURL
+  | BadState
+  -- ^ Tried to perform some action on a torrent precluded by the current state
+  -- of the torrent. E.g. Tried to verify a torrent that is already Verifying.
+    deriving (Show, Typeable, Eq)
+
+instance Exception WhiteoutException

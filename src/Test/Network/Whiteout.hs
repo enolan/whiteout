@@ -22,12 +22,6 @@ theTests =
         ]
     ]
 
-loadTorWithAssert :: FilePath -> IO Torrent
-loadTorWithAssert path = do
-    tor <- loadTorrentFromFile path
-    assertBool "Torrent didn't load" $ isJust tor
-    return $ fromJust tor
-
 addTorWithAssert :: Session -> Torrent -> FilePath -> IO TorrentSt
 addTorWithAssert sess tor path = do
     res <- addTorrent sess tor path
@@ -39,7 +33,7 @@ addTorWithAssert sess tor path = do
 verifyGeneric :: FilePath -> FilePath -> Bool -> Assertion
 verifyGeneric torpath datapath expectedResult = do
     sess <- initialize Nothing
-    tor <- loadTorWithAssert torpath
+    tor <- loadTorrentFromFile torpath
     torst <- addTorWithAssert sess tor datapath
     beginVerifyingTorrent torst
     atomically $ do
