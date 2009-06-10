@@ -18,6 +18,7 @@ module Network.Whiteout
     getActiveTorrents,
     isPieceComplete,
     getActivity,
+-- *Operations on torrents
     addTorrent,
     beginVerifyingTorrent,
     addPeer
