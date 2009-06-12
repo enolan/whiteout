@@ -3,7 +3,6 @@ module Test.Network.Whiteout (theTests) where
 import Control.Applicative
 import Control.Concurrent.STM
 import Data.Array.IArray
-import qualified Data.Map as M
 import Data.Maybe
 import Test.Framework
 import Test.Framework.Providers.HUnit
