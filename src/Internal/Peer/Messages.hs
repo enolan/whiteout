@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- This module exists so we can quickcheck the binary instances without exposing
 -- the types in Internal.Peer
 module Internal.Peer.Messages
