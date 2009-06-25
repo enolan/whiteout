@@ -3,7 +3,8 @@
 module Internal.Peer.Messages
     (
     Handshake(..),
-    PeerMsg(..)
+    PeerMsg(..),
+    enumSocket
     )
     where
 
@@ -14,7 +15,11 @@ import Data.Binary.Get (getByteString, remaining)
 import Data.Binary.Put (putByteString)
 import qualified Data.ByteString as B
 import Data.ByteString.Char8 () -- isString instance
+import Data.Iteratee.Base as Iter
+import Data.Iteratee.WrappedByteString
 import Data.Word (Word8, Word32)
+import Network.Socket
+import qualified Network.Socket.ByteString as SB
 
 import Internal.Types
 
@@ -103,3 +108,20 @@ instance Binary PeerMsg where
                 return $ Piece n off bs
             8 -> liftM3 Cancel get get get
             _ -> error "Invalid interpeer message, couldn't read tag."
+
+-- If I want to get this into the iteratee library it probably needs to use the
+-- ReadableChunk class rather than Network.Socket.ByteString. But I really don't
+-- feel like it today and Whiteout doesn't need or want to use anything but
+-- ByteStrings.
+-- | Run an iteratee over input from a socket. The socket must be connected.
+enumSocket :: Socket -> EnumeratorGM WrappedByteString Word8 IO a
+enumSocket s iter = do
+    bs <- SB.recv s 4096
+    case B.length bs of
+        0 -> enumErr "Remote closed socket" iter
+        _ -> do
+            igv <- runIter iter (Chunk $ WrapBS bs)
+            case igv of
+                Done x _        -> return . return $ x
+                Cont i Nothing  -> enumSocket s i
+                Cont _ (Just e) -> return $ throwErr e
