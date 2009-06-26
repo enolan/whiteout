@@ -2,7 +2,7 @@
 module Test.Internal.Peer.Messages (theTests) where
 
 import Control.Applicative
-import Control.Monad (replicateM)
+import Control.Monad (ap, replicateM)
 import Data.Binary
 import qualified Data.ByteString as B
 import Test.Framework
@@ -53,7 +53,4 @@ instance Arbitrary PeerMsg where
 
 instance Applicative Gen where
     pure = return
-    f <*> x = do
-        f' <- f
-        x' <- x
-        return $ f' x'
+    (<*>) = ap
