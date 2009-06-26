@@ -15,7 +15,6 @@ import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
 import Data.Maybe (fromJust)
 import Network.Socket
-import qualified Network.Socket.ByteString as SB
 import qualified Network.Socket.ByteString.Lazy as SBL
 
 import Internal.Peer.Messages
