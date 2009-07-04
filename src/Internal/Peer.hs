@@ -4,7 +4,7 @@ module Internal.Peer
     ) where
 
 import Control.Applicative
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.STM
 import Control.Exception
 import Data.Array.IArray (bounds)
@@ -52,8 +52,14 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
 peerHandler :: TorrentSt -> Socket -> IO ()
 peerHandler torst s = do
     peerSt <- atomically newPeerSt
-    forkIO $ peerWriter torst peerSt s
-    (enumSocket s $ joinI $ enumPeerMsg (foreachI $ handler peerSt)) >>= run
+    bracket
+        (forkIO $ peerWriter torst peerSt s)
+        killThread
+        (const $ peerReader peerSt)
+    where
+        peerReader peerSt =
+            (enumSocket s $ joinI $ enumPeerMsg $ foreachI $ handler peerSt) >>=
+            run
 
 handler :: PeerSt -> PeerMsg -> IO ()
 handler peerSt it@(Request pn offset len)   = do
