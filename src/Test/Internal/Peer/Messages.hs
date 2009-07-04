@@ -3,8 +3,12 @@ module Test.Internal.Peer.Messages (theTests) where
 
 import Control.Applicative
 import Control.Monad (ap, replicateM)
+import Control.Monad.Identity
 import Data.Binary
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import Data.Iteratee.Base
+import Data.Iteratee.WrappedByteString
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
@@ -15,7 +19,19 @@ import Internal.Peer.Messages
 theTests :: Test
 theTests = testGroup "Internal.Peer.Messages" [
     testProperty "handshakeRoundTrip" handshakeRoundTrip,
-    testProperty "peerMsgRoundTrip" peerMsgRoundTrip
+    testProperty "peerMsgRoundTrip" peerMsgRoundTrip,
+    testProperty "decodeI1ChunkRoundTrip - PeerMsg"
+        (decodeI1ChunkRoundTrip :: PeerMsg -> Bool),
+    testProperty "decodeI1ChunkRoundTrip - Handshake"
+        (decodeI1ChunkRoundTrip :: Handshake -> Bool),
+    testProperty "decodeI1ChunkRoundTrip - Word32"
+        (decodeI1ChunkRoundTrip :: Word32 -> Bool),
+    testProperty "decodeINChunkRoundTrip - PeerMsg"
+        (decodeINChunkRoundTrip :: PeerMsg -> Positive Int -> Bool),
+    testProperty "decodeINChunkRoundTrip - Handshake"
+        (decodeINChunkRoundTrip :: Handshake -> Positive Int -> Bool),
+    testProperty "decodeINChunkRoundTrip - Word32"
+        (decodeINChunkRoundTrip :: Word32 -> Positive Int -> Bool)
     ]
 
 handshakeRoundTrip :: Handshake -> Bool
@@ -54,3 +70,19 @@ instance Arbitrary PeerMsg where
 instance Applicative Gen where
     pure = return
     (<*>) = ap
+
+-- Just like peerMsgRoundTrip, but in the context of decodeI
+decodeI1ChunkRoundTrip :: (Arbitrary a, Binary a, Eq a) => a -> Bool
+decodeI1ChunkRoundTrip x = x == decoded
+    where
+    bsIn = B.concat $ L.toChunks $ encode x
+    decoded = runIdentity $ run $ runIdentity $ enumPure1Chunk (WrapBS bsIn)
+        decodeI
+
+decodeINChunkRoundTrip :: (Arbitrary a, Binary a, Eq a) =>
+    a -> Positive Int -> Bool
+decodeINChunkRoundTrip x (Positive n) = x == decoded
+    where
+    bsIn = B.concat $ L.toChunks $ encode x
+    decoded = runIdentity $ run $ runIdentity $ enumPureNChunk (WrapBS bsIn) n
+        decodeI

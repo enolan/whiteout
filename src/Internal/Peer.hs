@@ -5,16 +5,20 @@ module Internal.Peer
 
 import Control.Applicative
 import Control.Concurrent (forkIO)
+import Control.Concurrent.STM
 import Control.Exception
-import Control.Monad (when)
 import Data.Array.IArray (bounds)
 import Data.Binary
 import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
+import Data.Iteratee.Base as Iter
+import Data.Iteratee.WrappedByteString
 import Data.Maybe (fromJust)
+import qualified Data.Set as S
 import Network.Socket
+import qualified Network.Socket.ByteString as SB
 import qualified Network.Socket.ByteString.Lazy as SBL
 
 import Internal.Peer.Messages
@@ -45,25 +49,95 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             Handler (\(e :: ErrorCall) -> print e)
             ]
 
--- PeerMsg handling loop
 peerHandler :: TorrentSt -> Socket -> IO ()
 peerHandler torst s = do
--- This whole thing makes (way too many?) more syscalls than necessary.
--- Could/should do some buffering scheme. Do Iteratees apply here?
-    msgLen :: Word32 <- decode <$> recvAll s 4
-    when (msgLen > 0) $ do
-        msg <- decode <$> recvAll s (fromIntegral msgLen)
-        case msg of
-            it@(Request pn offset len) -> do
-                print it
-                dataToSend <-
-                    (B.take (fromIntegral len) .
-                        B.drop (fromIntegral offset)) <$>
-                    fromJust <$> getPiece torst pn
-                let msgToSend = Piece pn offset dataToSend
-                sendPeerMsg s msgToSend
-            other -> print other
-    peerHandler torst s
+    peerSt <- atomically newPeerSt
+    forkIO $ peerWriter torst peerSt s
+    (enumSocket s $ joinI $ enumPeerMsg (foreachI $ handler peerSt)) >>= run
+
+handler :: PeerSt -> PeerMsg -> IO ()
+handler peerSt it@(Request pn offset len)   = do
+    print it
+    atomically $ do
+        pieceReqs' <- readTVar $ pieceReqs peerSt
+        writeTVar (pieceReqs peerSt) $
+            S.insert (pn, offset, len) pieceReqs'
+handler _peerSt it                          = print it
+
+-- | The state associated with a peer connection. Used for communication
+-- between the reader thread, the writer thread and, when it's actually written,
+-- the peer manager.
+data PeerSt = PeerSt {
+    pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32))
+    -- ^ Pieces in the pipeline, to be sent.
+
+    -- Later we'll have a TChan of the have messages to send, dupTChan'd from
+    -- the global one, and a bitfield, and track choke/interest state here.
+    }
+
+newPeerSt :: STM PeerSt
+newPeerSt = PeerSt <$> newTVar S.empty
+
+peerWriter :: TorrentSt -> PeerSt -> Socket -> IO ()
+peerWriter torst (PeerSt {pieceReqs = pieceReqs}) s = loop
+    where
+    loop = do
+        (pn, offset, len) <- atomically $ do
+            pieceReqs' <- readTVar pieceReqs
+            case S.null pieceReqs' of
+                True -> retry
+                False -> do
+                    let (req, pieceReqs'') = S.deleteFindMin pieceReqs'
+                    writeTVar pieceReqs pieceReqs''
+                    return req
+        dataToSend <-
+            (B.take (fromIntegral len) . B.drop (fromIntegral offset)) <$>
+            fromJust <$> getPiece torst pn
+        sendPeerMsg s $ Piece pn offset dataToSend
+        loop
+
+-- Poor man's mapStreamM?
+foreachI :: Monad m => (el -> m ()) -> IterateeG [] el m ()
+foreachI f = IterateeG step
+    where
+    step s@(EOF Nothing)    = return $ Done () s
+    step   (EOF (Just err)) = return $ Cont (throwErr err) (Just err)
+    step   (Chunk [])       = return $ Cont (foreachI f) Nothing
+    step   (Chunk xs)       = do
+        mapM_ f xs
+        return $ Cont (foreachI f) Nothing
+
+-- Enumerator of BT PeerMsgs with length prefixes.
+enumPeerMsg :: (Monad m, Functor m) =>
+    EnumeratorN WrappedByteString Word8 [] PeerMsg m a
+enumPeerMsg = convStream convPeerMsgs
+    where
+    convPeerMsgs = eitherToMaybe <$> checkErr ((\x -> [x]) <$> getPeerMsg)
+    eitherToMaybe (Left  _) = Nothing
+    eitherToMaybe (Right x) = Just x
+
+getPeerMsg :: Monad m => IterateeG WrappedByteString Word8 m PeerMsg
+getPeerMsg = do
+    len :: Word32 <- joinI $ Iter.take 4 decodeI
+    case len of
+        0 -> getPeerMsg -- Zero length messages are keepalives.
+        _ -> joinI $ Iter.take (fromIntegral len) decodeI
+
+-- | Run an iteratee over input from a socket. The socket must be connected.
+-- This is equivalent to enumFd modulo the blocking problem. Totally did not
+-- realize you could call read() on a socket. Once the blocking issue with
+-- enumFd is fixed, this should be deleted.
+enumSocket :: Socket -> EnumeratorGM WrappedByteString Word8 IO a
+enumSocket s iter = do
+    bs <- SB.recv s 4096
+    case B.length bs of
+        0 -> enumErr "Remote closed socket" iter
+        _ -> do
+            igv <- runIter iter (Chunk $ WrapBS bs)
+            case igv of
+                Done x _        -> return . return $ x
+                Cont i Nothing  -> enumSocket s i
+                Cont _ (Just e) -> return $ throwErr e
 
 sendHandshake :: Session -> TorrentSt -> Socket -> IO ()
 sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
