@@ -118,7 +118,7 @@ enumPeerMsg :: (Monad m, Functor m) =>
     EnumeratorN WrappedByteString Word8 [] PeerMsg m a
 enumPeerMsg = convStream convPeerMsgs
     where
-    convPeerMsgs = eitherToMaybe <$> checkErr ((\x -> [x]) <$> getPeerMsg)
+    convPeerMsgs = eitherToMaybe <$> checkErr ((:[]) <$> getPeerMsg)
     eitherToMaybe (Left  _) = Nothing
     eitherToMaybe (Right x) = Just x
 
