@@ -27,7 +27,7 @@ Library
                         Internal.Peer, Internal.Peer.Messages, Internal.Pieces,
                         Internal.Types
     Hs-source-dirs:     src
-    Ghc-options:        -Wall -fno-warn-name-shadowing
+    Ghc-options:        -Wall
     Extensions:         DeriveDataTypeable, OverloadedStrings,
                         ScopedTypeVariables
 
@@ -48,6 +48,6 @@ Executable runTests
                         Test.ArbitraryInstances, Test.Internal.BEncode,
                         Test.Internal.Peer.Messages, Test.Network.Whiteout
     Hs-source-dirs:     src
-    Ghc-options:        -Wall -fno-warn-name-shadowing
+    Ghc-options:        -Wall
     Extensions:         DeriveDataTypeable, OverloadedStrings,
                         ScopedTypeVariables

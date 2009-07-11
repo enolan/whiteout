@@ -44,9 +44,9 @@ instance Arbitrary Handshake where
         infoHash <- B.pack <$> vectorOf 20 arbitrary
         peerId <- B.pack <$> vectorOf 20 arbitrary
         return Handshake {
-            resByte0 = resByte0, resByte1 = resByte1, resByte2 = resByte2,
-            resByte3 = resByte3, resByte4 = resByte4, resByte5 = resByte5,
-            resByte6 = resByte6, resByte7 = resByte7,
+            hResByte0 = resByte0, hResByte1 = resByte1, hResByte2 = resByte2,
+            hResByte3 = resByte3, hResByte4 = resByte4, hResByte5 = resByte5,
+            hResByte6 = resByte6, hResByte7 = resByte7,
             hInfoHash = infoHash,
             hPeerId = peerId
             }

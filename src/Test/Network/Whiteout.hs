@@ -32,9 +32,12 @@ verifyGeneric torpath datapath expectedResult = do
         case activity of
             Verifying -> retry
             Stopped -> return ()
-    let (_, max) = bounds $ pieceHashes tor
-    allExpected <- fmap and $ atomically
-        (mapM (\i -> (==expectedResult) <$> isPieceComplete torst i) [0..max])
+    let (0, maxPieceNum) = bounds $ tPieceHashes tor
+    allExpected <- and <$> atomically
+        (mapM
+            (\i -> (==expectedResult) <$> isPieceComplete torst i)
+            [0..maxPieceNum]
+        )
     assertBool "Some pieces were not verified as expected" allExpected
 
 verifySingleFileShouldSucceed :: Assertion

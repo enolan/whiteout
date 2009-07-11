@@ -23,14 +23,14 @@ import Data.Word (Word8, Word32)
 import Internal.Types
 
 data Handshake = Handshake {
-    resByte0 :: Word8,
-    resByte1 :: Word8,
-    resByte2 :: Word8,
-    resByte3 :: Word8,
-    resByte4 :: Word8,
-    resByte5 :: Word8,
-    resByte6 :: Word8,
-    resByte7 :: Word8,
+    hResByte0 :: Word8,
+    hResByte1 :: Word8,
+    hResByte2 :: Word8,
+    hResByte3 :: Word8,
+    hResByte4 :: Word8,
+    hResByte5 :: Word8,
+    hResByte6 :: Word8,
+    hResByte7 :: Word8,
     hInfoHash :: B.ByteString,
     hPeerId :: B.ByteString
     } deriving (Show, Eq)
@@ -40,8 +40,8 @@ instance Binary Handshake where
         put (19 :: Word8)
         putByteString "BitTorrent protocol"
         mapM_ (put . ($h))
-            [resByte0, resByte1, resByte2, resByte3, resByte4, resByte5,
-             resByte6, resByte7]
+            [hResByte0, hResByte1, hResByte2, hResByte3, hResByte4, hResByte5,
+             hResByte6, hResByte7]
         putByteString $ hInfoHash h
         putByteString $ hPeerId h
     get = do
@@ -56,9 +56,9 @@ instance Binary Handshake where
         infoHash <- getByteString 20
         peerId <- getByteString 20
         return Handshake {
-            resByte0 = resByte0, resByte1 = resByte1, resByte2 = resByte2,
-            resByte3 = resByte3, resByte4 = resByte4, resByte5 = resByte5,
-            resByte6 = resByte6, resByte7 = resByte7,
+            hResByte0 = resByte0, hResByte1 = resByte1, hResByte2 = resByte2,
+            hResByte3 = resByte3, hResByte4 = resByte4, hResByte5 = resByte5,
+            hResByte6 = resByte6, hResByte7 = resByte7,
             hInfoHash = infoHash,
             hPeerId = peerId
             }

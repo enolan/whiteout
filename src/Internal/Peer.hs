@@ -38,9 +38,9 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             print theirHandshake
             let
-                numPieces = snd $ bounds $ pieceHashes $ torrent torst
-                (quot, rem) = quotRem numPieces 8
-                bitFieldLen = fromIntegral $ if rem /= 0 then quot+1 else quot
+                numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
+                (quot', rem') = quotRem numPieces 8
+                bitFieldLen = fromIntegral $ if rem' /= 0 then quot'+1 else quot'
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
             sendPeerMsg s Unchoke
             peerHandler torst s
@@ -85,16 +85,16 @@ newPeerSt :: STM PeerSt
 newPeerSt = PeerSt <$> newTVar S.empty
 
 peerWriter :: TorrentSt -> PeerSt -> Socket -> IO ()
-peerWriter torst (PeerSt {pieceReqs = pieceReqs}) s = loop
+peerWriter torst (PeerSt {pieceReqs = pieceReqs'}) s = loop
     where
     loop = do
         (pn, offset, len) <- atomically $ do
-            pieceReqs' <- readTVar pieceReqs
-            case S.null pieceReqs' of
+            pieceReqs'' <- readTVar pieceReqs'
+            case S.null pieceReqs'' of
                 True -> retry
                 False -> do
-                    let (req, pieceReqs'') = S.deleteFindMin pieceReqs'
-                    writeTVar pieceReqs pieceReqs''
+                    let (req, pieceReqs''') = S.deleteFindMin pieceReqs''
+                    writeTVar pieceReqs' pieceReqs'''
                     return req
         dataToSend <-
             (B.take (fromIntegral len) . B.drop (fromIntegral offset)) <$>
@@ -147,9 +147,9 @@ enumSocket s iter = do
 
 sendHandshake :: Session -> TorrentSt -> Socket -> IO ()
 sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
-    resByte0 = 0, resByte1 = 0, resByte2 = 0, resByte3 = 0, resByte4 = 0,
-    resByte5 = 0, resByte6 = 0, resByte7 = 0,
-    hInfoHash = tInfohash $ torrent torst,
+    hResByte0 = 0, hResByte1 = 0, hResByte2 = 0, hResByte3 = 0, hResByte4 = 0,
+    hResByte5 = 0, hResByte6 = 0, hResByte7 = 0,
+    hInfoHash = tInfohash $ sTorrent torst,
     hPeerId = sPeerId sess}
 
 sendPeerMsg :: Socket -> PeerMsg -> IO ()

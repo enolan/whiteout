@@ -22,29 +22,29 @@ data Session = Session {
 
 -- | The state of a torrent.
 data TorrentSt = TorrentSt {
-    torrent :: Torrent,
-    path :: FilePath,
+    sTorrent :: Torrent,
+    sPath :: FilePath,
     -- | Is a given piece completed? For now (2009-05-24) this only reflects
     -- whether a piece's hash has been checked and found correct.
-    completion :: TArray PieceNum Bool,
-    activity :: TVar Activity
+    sCompletion :: TArray PieceNum Bool,
+    sActivity :: TVar Activity
     }
 
 -- | The static information about a torrent, i.e. that stored in a file named
 -- @foo.torrent@.
 data Torrent = Torrent {
     -- | The announce URL.
-    announce :: ByteString,
+    tAnnounce :: ByteString,
     -- | The name of the top-level directory or the file if it is a single file
     -- torrent.
-    name :: ByteString,
+    tName :: ByteString,
     -- | Length of a piece in bytes.
-    pieceLen :: Int,
+    tPieceLen :: Int,
     -- | Map piece numbers to their SHA-1 hashes.
-    pieceHashes :: Array PieceNum ByteString,
+    tPieceHashes :: Array PieceNum ByteString,
     -- | Either the length of the single file or a list of filenames and their
     -- lengths.
-    files :: Either Integer [(Integer, FilePath)],
+    tFiles :: Either Integer [(Integer, FilePath)],
     -- | SHA-1 of the bencoded info dictionary.
     tInfohash :: ByteString
     } deriving (Show)

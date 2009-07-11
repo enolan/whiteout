@@ -10,8 +10,8 @@ module Network.Whiteout
     Session(),
     TorrentSt(),
     Activity(..),
-    torrent,
-    path,
+    sTorrent,
+    sPath,
     initialize,
     close,
     getActiveTorrents,
@@ -93,15 +93,15 @@ toTorrent benc = do
     name <- M.lookup "name" info >>= getString
     files <- getFiles info
     Just Torrent
-        {announce = announce,
-         name = name,
-         pieceLen = fromIntegral pieceLen,
-         pieceHashes =
+        {tAnnounce = announce,
+         tName = name,
+         tPieceLen = fromIntegral pieceLen,
+         tPieceHashes =
             listArray
                 (0,(fromIntegral $ B.length pieceHashes `div` 20) - 1)
                 pieceHashes',
          tInfohash = infohash,
-         files = files
+         tFiles = files
         } >>= checkLength
     where
         --The get* could probably all be replaced with something using generics.
@@ -124,26 +124,26 @@ toTorrent benc = do
             then []
             else let (hash, rest) = B.splitAt 20 hs in hash : groupHashes rest
         getFiles i = let
-            length = M.lookup "length" i >>= getInt
+            torLength = M.lookup "length" i >>= getInt
             files  = M.lookup "files" i >>= getList
-            in case (length, files) of
-                (Just i  , Nothing) -> Just $ Left i
+            in case (torLength, files) of
+                (Just l  , Nothing) -> Just $ Left l
                 (Nothing , Just fs) -> fmap Right $ mapM getFile fs
                 (Just _  , Just _ ) -> Nothing
                 (Nothing , Nothing) -> Nothing
         getFile :: BEncode -> Maybe (Integer, FilePath)
         getFile d = do
             d' <- getDict d
-            length <- M.lookup "length" d' >>= getInt
+            fLength <- M.lookup "length" d' >>= getInt
             path <- M.lookup "path" d' >>= getList >>= mapM getString
             let path' = joinPath $ map BC.unpack path
-            Just (length,path')
+            Just (fLength,path')
         checkLength t = let
-            len = either id (sum . map fst) $ files t
-            numPieces = snd (bounds $ pieceHashes t) + 1
+            len = either id (sum . map fst) $ tFiles t
+            numPieces = snd (bounds $ tPieceHashes t) + 1
             numPieces' = 
-                ceiling
-                    ((fromIntegral len :: Double) / (fromIntegral $ pieceLen t))
+                ceiling $
+                    (fromIntegral len :: Double) / (fromIntegral $ tPieceLen t)
             in if numPieces == numPieces'
                 then Just t
                 else Nothing
@@ -159,8 +159,8 @@ initialize :: Maybe (B.ByteString)
 initialize name = do
     peerId <- genPeerId $ fromMaybe "WO0001" name
     atomically $ do
-        torrents <- newTVar M.empty
-        return Session { torrents = torrents, sPeerId = peerId }
+        torrents' <- newTVar M.empty
+        return Session { torrents = torrents', sPeerId = peerId }
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
@@ -179,17 +179,17 @@ getActiveTorrents :: Session -> STM (M.Map B.ByteString TorrentSt)
 getActiveTorrents = readTVar . torrents
 
 isPieceComplete :: TorrentSt -> PieceNum -> STM Bool
-isPieceComplete = readArray . completion
+isPieceComplete = readArray . sCompletion
 
 getActivity :: TorrentSt -> STM Activity
-getActivity = readTVar . activity
+getActivity = readTVar . sActivity
 
 -- | Add a torrent to a running session for seeding/checking. Since we only
 -- support seeding at present, this requires the files be in place and of the
 -- correct size. If this is not the case, throws 'BadFiles'. Returns the
 -- TorrentSt added, for convenience.
 addTorrent :: Session -> Torrent -> FilePath -> IO TorrentSt
-addTorrent sess tor path = case files tor of
+addTorrent sess tor path = case tFiles tor of
     Left len -> do
         ok <- checkFile (len,path)
         if ok
@@ -211,13 +211,13 @@ addTorrent sess tor path = case files tor of
     where
         addprefix (l,p) = (l, path </> p)
         checkFile :: (Integer, FilePath) -> IO Bool
-        checkFile (size, path) = do
-            e <- doesFileExist path
+        checkFile (size, path') = do
+            e <- doesFileExist path'
             if e
                 then do
-                    p <- getPermissions path
+                    p <- getPermissions path'
                     if readable p
-                        then withBinaryFile path ReadMode $ \h -> do
+                        then withBinaryFile path' ReadMode $ \h -> do
                             size' <- hFileSize h
                             if size == size'
                                 then return True
@@ -227,14 +227,14 @@ addTorrent sess tor path = case files tor of
         addTorrent' :: STM TorrentSt
         addTorrent' = do
             torsts <- readTVar $ torrents sess
-            completion <- newArray (bounds $ pieceHashes tor) False
+            completion <- newArray (bounds $ tPieceHashes tor) False
             activity <- newTVar Stopped
             let
                 torst = TorrentSt {
-                    torrent = tor,
-                    path = path,
-                    completion = completion,
-                    activity = activity }
+                    sTorrent = tor,
+                    sPath = path,
+                    sCompletion = completion,
+                    sActivity = activity }
                 torsts' = M.insert (tInfohash tor) torst torsts
             writeTVar (torrents sess) torsts'
             return torst
@@ -250,7 +250,7 @@ beginVerifyingTorrent torst = do
     a <- atomically $ getActivity torst
     case a of
         Stopped -> do
-            atomically $ writeTVar (activity torst) Verifying
+            atomically $ writeTVar (sActivity torst) Verifying
             forkIO (verify 0)
             return ()
         _ -> throw BadState
@@ -260,21 +260,22 @@ beginVerifyingTorrent torst = do
             piece <- getPiece torst piecenum
             case piece of
                 Nothing -> do
-                    atomically $ writeTVar (activity torst) Stopped
+                    atomically $ writeTVar (sActivity torst) Stopped
                     error "Couldn't load a piece for verifying!"
                     -- TODO we need a real error logging mechanism.
                 Just piece' -> do
                     let
-                        expected = (pieceHashes $ torrent torst) ! piecenum
+                        expected = (tPieceHashes $ sTorrent torst) ! piecenum
                         actual = B.concat $ L.toChunks $ bytestringDigest $
                             sha1 $ L.fromChunks [piece']
                     if actual == expected
                         then atomically $
-                            writeArray (completion torst) piecenum True
+                            writeArray (sCompletion torst) piecenum True
                         else atomically $
-                            writeArray (completion torst) piecenum False
-                    if piecenum == (snd $ bounds $ pieceHashes $ torrent torst)
-                        then atomically $ writeTVar (activity torst) Stopped
+                            writeArray (sCompletion torst) piecenum False
+                    if piecenum ==
+                        (snd $ bounds $ tPieceHashes $ sTorrent torst)
+                        then atomically $ writeTVar (sActivity torst) Stopped
                         else verify (piecenum+1)
 
 data WhiteoutException =
