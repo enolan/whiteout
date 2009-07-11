@@ -40,7 +40,8 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             let
                 numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
                 (quot', rem') = quotRem numPieces 8
-                bitFieldLen = fromIntegral $ if rem' /= 0 then quot'+1 else quot'
+                bitFieldLen =
+                    fromIntegral $ if rem' /= 0 then quot'+1 else quot'
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
             sendPeerMsg s Unchoke
             peerHandler torst s
