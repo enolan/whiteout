@@ -157,7 +157,8 @@ initialize :: Maybe (B.ByteString)
     -- directory. If you pass 'Nothing', we'll use WO and the whiteout version.
     -> IO Session
 initialize name = do
-    peerId <- genPeerId $ fromMaybe "WO0001" name
+    -- Could use cabal to get our version number here...
+    peerId <- genPeerId $ fromMaybe "WO0000" name 
     atomically $ do
         torrents' <- newTVar M.empty
         return Session { torrents = torrents', sPeerId = peerId }
