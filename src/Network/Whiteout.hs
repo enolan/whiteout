@@ -268,7 +268,7 @@ beginVerifyingTorrent sess torst = do
             case piece of
                 Nothing -> do
                     atomically $ writeTVar (sActivity torst) Stopped
-                    atomically $ maybeLog sess Critical $
+                    atomically $ maybeLog sess Critical
                         "verifier thread: couldn't read a piece, aborting."
                 Just piece' -> do
                     let

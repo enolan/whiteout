@@ -70,8 +70,7 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
 
 
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
-peerHandler sess torst peerSt s = do
-    bracket
+peerHandler sess torst peerSt s = bracket
         (forkIO $ peerWriter torst peerSt s)
         killThread
         (const peerReader)
@@ -193,5 +192,5 @@ recvAll s numBytes = do
           | otherwise -> error "recvAll: the impossible happened"
 
 maybeLogPeer :: Session -> PeerSt -> LogLevel -> B.ByteString -> IO ()
-maybeLogPeer sess peerSt lvl msg = do
+maybeLogPeer sess peerSt lvl msg =
     atomically $ maybeLog sess lvl $ B.concat ["(", pName peerSt, ") ", msg]
