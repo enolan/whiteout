@@ -12,6 +12,8 @@ module Network.Whiteout
     Activity(..),
     sTorrent,
     sPath,
+    LogLevel(..),
+    logToConsole,
     initialize,
     close,
     getActiveTorrents,
@@ -49,6 +51,7 @@ import System.IO
 import System.Random
 
 import Internal.BEncode
+import Internal.Logging
 import Internal.Peer (addPeer)
 import Internal.Pieces
 import Internal.Types
@@ -155,13 +158,16 @@ initialize :: Maybe (B.ByteString)
     --
     -- See <http://wiki.theory.org/BitTorrentSpecification#peer_id> for a
     -- directory. If you pass 'Nothing', we'll use WO and the whiteout version.
+    -> Maybe (TChan (LogLevel, B.ByteString))
+    -- ^ Logging channel.
     -> IO Session
-initialize name = do
+initialize name ourLogChan = do
     -- Could use cabal to get our version number here...
     peerId <- genPeerId $ fromMaybe "WO0000" name 
     atomically $ do
         torrents' <- newTVar M.empty
-        return Session { torrents = torrents', sPeerId = peerId }
+        return Session
+            { torrents = torrents', sPeerId = peerId, logChan = ourLogChan }
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
@@ -246,8 +252,8 @@ addTorrent sess tor path = case tFiles tor of
 -- exception will be thrown. When the verifier thread starts, the torrent's
 -- 'Activity' will be 'Verifying'; when it finishes it will set it back to
 -- 'Stopped'.
-beginVerifyingTorrent :: TorrentSt -> IO ()
-beginVerifyingTorrent torst = do
+beginVerifyingTorrent :: Session -> TorrentSt -> IO ()
+beginVerifyingTorrent sess torst = do
     a <- atomically $ getActivity torst
     case a of
         Stopped -> do
@@ -262,8 +268,8 @@ beginVerifyingTorrent torst = do
             case piece of
                 Nothing -> do
                     atomically $ writeTVar (sActivity torst) Stopped
-                    error "Couldn't load a piece for verifying!"
-                    -- TODO we need a real error logging mechanism.
+                    atomically $ maybeLog sess Critical $
+                        "verifier thread: couldn't read a piece, aborting."
                 Just piece' -> do
                     let
                         expected = (tPieceHashes $ sTorrent torst) ! piecenum

@@ -11,16 +11,19 @@ import Data.Array.IArray (bounds)
 import Data.Binary
 import Data.Binary.Put
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
 import Data.Iteratee.WrappedByteString
 import Data.Maybe (fromJust)
 import qualified Data.Set as S
-import Network.Socket
+import Network.Socket hiding (Debug) -- clashes with the LogLevel
 import qualified Network.Socket.ByteString as SB
 import qualified Network.Socket.ByteString.Lazy as SBL
+import qualified Text.Show.ByteString as SBS
 
+import Internal.Logging (maybeLog)
 import Internal.Peer.Messages
 import Internal.Pieces
 import Internal.Types
@@ -32,11 +35,18 @@ addPeer :: Session -> TorrentSt -> String -> PortNumber -> IO ()
 addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
     where
         go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
+            reqQueue <- newTVarIO S.empty
+            let peerSt = PeerSt {
+                    pieceReqs = reqQueue,
+                    pName = peerName
+                    }
+            maybeLogPeer sess peerSt Low "connecting"
             addr <- inet_addr h
             connect s $ SockAddrInet p addr
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
-            print theirHandshake
+            maybeLogPeer sess peerSt Debug $ B.concat
+                ["got handshake: ", (BC.pack $ show theirHandshake)]
             let
                 numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
                 (quot', rem') = quotRem numPieces 8
@@ -44,46 +54,56 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
                     fromIntegral $ if rem' /= 0 then quot'+1 else quot'
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
             sendPeerMsg s Unchoke
-            peerHandler torst s
+            peerHandler sess torst peerSt s
         handlers = [
-            Handler (\(e :: IOException) -> print e),
-            Handler (\(e :: ErrorCall) -> print e)
+            -- This is bad. We don't distinguish between normal and abnormal
+            -- disconnects. FIXME
+            Handler (\(e :: IOException) -> handleEx e),
+            Handler (\(e :: ErrorCall) -> handleEx e)
             ]
+        handleEx :: Show e => e -> IO ()
+        handleEx e = atomically $ maybeLog sess Medium $ B.concat
+            ["Caught exception in peer handler. ", peerName, ": ",
+             BC.pack $ show e]
+        peerName = B.concat
+            [BC.pack h, ":", BC.pack $ show (fromIntegral p :: Int)]
 
-peerHandler :: TorrentSt -> Socket -> IO ()
-peerHandler torst s = do
-    peerSt <- atomically newPeerSt
+
+peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
+peerHandler sess torst peerSt s = do
     bracket
         (forkIO $ peerWriter torst peerSt s)
         killThread
-        (const $ peerReader peerSt)
+        (const peerReader)
     where
-        peerReader peerSt =
-            (enumSocket s $ joinI $ enumPeerMsg $ foreachI $ handler peerSt) >>=
-            run
+        peerReader = do
+            iter <- enumSocket s $ joinI $ enumPeerMsg $ foreachI $
+                handler sess peerSt
+            run iter
 
-handler :: PeerSt -> PeerMsg -> IO ()
-handler peerSt it@(Request pn offset len)   = do
-    print it
+handler :: Session -> PeerSt -> PeerMsg -> IO ()
+handler sess peerSt it@(Request pn offset len)   = do
+    maybeLogPeer sess peerSt Debug $ B.concat
+        ["Got message: ", BC.pack $ show it]
     atomically $ do
         pieceReqs' <- readTVar $ pieceReqs peerSt
         writeTVar (pieceReqs peerSt) $
             S.insert (pn, offset, len) pieceReqs'
-handler _peerSt it                          = print it
+handler sess peerSt it                          =
+    maybeLogPeer sess peerSt Debug $ B.concat
+        ["Got message: ", BC.pack $ show it]
 
 -- | The state associated with a peer connection. Used for communication
 -- between the reader thread, the writer thread and, when it's actually written,
 -- the peer manager.
 data PeerSt = PeerSt {
-    pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32))
+    pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
     -- ^ Pieces in the pipeline, to be sent.
+    pName :: B.ByteString
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one, and a bitfield, and track choke/interest state here.
     }
-
-newPeerSt :: STM PeerSt
-newPeerSt = PeerSt <$> newTVar S.empty
 
 peerWriter :: TorrentSt -> PeerSt -> Socket -> IO ()
 peerWriter torst (PeerSt {pieceReqs = pieceReqs'}) s = loop
@@ -171,3 +191,7 @@ recvAll s numBytes = do
                 return $ L.append whatWeGot rest
           | count == numBytes -> return whatWeGot
           | otherwise -> error "recvAll: the impossible happened"
+
+maybeLogPeer :: Session -> PeerSt -> LogLevel -> B.ByteString -> IO ()
+maybeLogPeer sess peerSt lvl msg = do
+    atomically $ maybeLog sess lvl $ B.concat ["(", pName peerSt, ") ", msg]

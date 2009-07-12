@@ -23,10 +23,10 @@ theTests =
 
 verifyGeneric :: FilePath -> FilePath -> Bool -> Assertion
 verifyGeneric torpath datapath expectedResult = do
-    sess <- initialize Nothing
+    sess <- initialize Nothing Nothing
     tor <- loadTorrentFromFile torpath
     torst <- addTorrent sess tor datapath
-    beginVerifyingTorrent torst
+    beginVerifyingTorrent sess torst
     atomically $ do
         activity <- getActivity torst
         case activity of

@@ -4,6 +4,7 @@ module Internal.Types
     TorrentSt(..),
     Torrent(..),
     Activity(..),
+    LogLevel(..),
     PieceNum
     ) where
 
@@ -17,7 +18,8 @@ import Data.Word (Word32)
 data Session = Session {
     -- | Map from infohashes to torrents.
     torrents :: TVar (M.Map ByteString TorrentSt),
-    sPeerId :: ByteString
+    sPeerId :: ByteString,
+    logChan :: Maybe (TChan (LogLevel, ByteString))
     }
 
 -- | The state of a torrent.
@@ -56,3 +58,11 @@ data Activity =
     deriving (Eq, Ord, Show)
 
 type PieceNum = Word32
+
+data LogLevel = Debug -- ^ Messages of interest only for debugging Whiteout.
+              | Low -- ^ Boring messages e.g. new peer connections.
+              | Medium -- ^ Slightly less boring messages e.g. announces.
+              | Critical
+              -- ^ Problems which obstruct the primary functionality of Whiteout
+              -- e.g. an error reading from disk.
+    deriving (Show, Eq)
