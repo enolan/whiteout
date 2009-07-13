@@ -146,7 +146,7 @@ toTorrent benc = do
             numPieces = snd (bounds $ tPieceHashes t) + 1
             numPieces' = 
                 ceiling $
-                    (fromIntegral len :: Double) / (fromIntegral $ tPieceLen t)
+                    (fromIntegral len :: Double) / fromIntegral (tPieceLen t)
             in if numPieces == numPieces'
                 then Just t
                 else Nothing
@@ -171,7 +171,7 @@ initialize name ourLogChan = do
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
-    randompart <- BC.pack <$> (replicateM 12 $ randomRIO ('0','9'))
+    randompart <- BC.pack <$> replicateM 12 (randomRIO ('0','9'))
     return $ B.concat ["-", nameandver, "-", randompart]
 
 -- | Clean up after ourselves, closing file handles, ending connections, etc.

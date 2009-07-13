@@ -16,7 +16,7 @@ instance Arbitrary Word8 where
 
 instance Random Word8 where
     randomR (low, high) g =
-        case randomR ((fromIntegral low) :: Integer, fromIntegral high) g of
+        case randomR (fromIntegral low :: Integer, fromIntegral high) g of
             (val, gen) -> (fromIntegral val, gen)
     random = randomR (minBound, maxBound)
 
@@ -25,6 +25,6 @@ instance Arbitrary Word32 where
 
 instance Random Word32 where
     randomR (low, high) g =
-        case randomR ((fromIntegral low) :: Integer, fromIntegral high) g of
+        case randomR (fromIntegral low :: Integer, fromIntegral high) g of
             (val, gen) -> (fromIntegral val, gen)
     random = randomR (minBound, maxBound)

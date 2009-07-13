@@ -53,5 +53,5 @@ getPieceMultiFile pieceSize prefix files offset =
                 (\h -> do
                     hSeek h AbsoluteSeek offset'
                     B.hGet h neededBytes)
-            rest <- go fs 0 (neededBytes - (B.length chunk))
+            rest <- go fs 0 (neededBytes - B.length chunk)
             return $ (chunk:) <$> rest

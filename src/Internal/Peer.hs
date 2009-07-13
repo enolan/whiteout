@@ -110,9 +110,9 @@ peerWriter torst (PeerSt {pieceReqs = pieceReqs'}) s = loop
     loop = do
         (pn, offset, len) <- atomically $ do
             pieceReqs'' <- readTVar pieceReqs'
-            case S.null pieceReqs'' of
-                True -> retry
-                False -> do
+            if S.null pieceReqs''
+                then retry
+                else do
                     let (req, pieceReqs''') = S.deleteFindMin pieceReqs''
                     writeTVar pieceReqs' pieceReqs'''
                     return req
@@ -175,7 +175,7 @@ sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
 sendPeerMsg :: Socket -> PeerMsg -> IO ()
 sendPeerMsg s p = SBL.sendAll s $ runPut $ do
     let p' = encode p
-    put ((fromIntegral $ L.length p') :: Word32)
+    put (fromIntegral $ L.length p' :: Word32)
     putLazyByteString p'
 
 -- Get the specified number of bytes from a socket, retrying until done.
