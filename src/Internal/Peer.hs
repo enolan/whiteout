@@ -68,7 +68,6 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
         peerName = B.concat
             [BC.pack h, ":", BC.pack $ show (fromIntegral p :: Int)]
 
-
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket
         (forkIO $ peerWriter torst peerSt s)
