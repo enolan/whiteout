@@ -14,6 +14,7 @@ module Network.Whiteout
     sPath,
     LogLevel(..),
     logToConsole,
+    logToFile,
     initialize,
     close,
     getActiveTorrents,
