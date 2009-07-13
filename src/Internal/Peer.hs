@@ -47,7 +47,7 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             maybeLogPeer sess peerSt Debug $ B.concat
-                ["got handshake: ", (BC.pack $ show theirHandshake)]
+                ["Got handshake: ", (BC.pack $ show theirHandshake)]
             let
                 numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
                 (quot', rem') = quotRem numPieces 8
