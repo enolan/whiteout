@@ -37,9 +37,11 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
     where
         go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
             reqQueue <- newTVarIO S.empty
+            interested' <- newTVarIO False
             let peerSt = PeerSt {
                     pieceReqs = reqQueue,
-                    pName = peerName
+                    pName = peerName,
+                    interested = interested'
                     }
             maybeLogPeer sess peerSt Low "Connecting"
             addr <- inet_addr h
@@ -95,6 +97,8 @@ handler sess peerSt it = do
             pieceReqs' <- readTVar $ pieceReqs peerSt
             writeTVar (pieceReqs peerSt) $
                 S.delete (pn, off, len) pieceReqs'
+        Interested -> atomically $ writeTVar (interested peerSt) True
+        NotInterested -> atomically $ writeTVar (interested peerSt) False
         _ -> return ()
     -- Later, we will check if the peer manager says it's time to kill the
     -- connection.
@@ -106,7 +110,8 @@ handler sess peerSt it = do
 data PeerSt = PeerSt {
     pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
     -- ^ Pieces in the pipeline, to be sent.
-    pName :: B.ByteString
+    pName :: B.ByteString,
+    interested :: TVar Bool
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one, and a bitfield, and track choke/interest state here.
