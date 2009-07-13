@@ -15,6 +15,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
+import Data.Iteratee.Binary
 import Data.Iteratee.WrappedByteString
 import Data.Maybe (fromJust)
 import qualified Data.Set as S
@@ -40,7 +41,7 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
                     pieceReqs = reqQueue,
                     pName = peerName
                     }
-            maybeLogPeer sess peerSt Low "connecting"
+            maybeLogPeer sess peerSt Low "Connecting"
             addr <- inet_addr h
             connect s $ SockAddrInet p addr
             sendHandshake sess torst s
@@ -55,9 +56,8 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
             sendPeerMsg s Unchoke
             peerHandler sess torst peerSt s
+            maybeLogPeer sess peerSt Debug "Disconnecting (normal)."
         handlers = [
-            -- This is bad. We don't distinguish between normal and abnormal
-            -- disconnects. FIXME
             Handler (\(e :: IOException) -> handleEx e),
             Handler (\(e :: ErrorCall) -> handleEx e)
             ]
@@ -80,7 +80,7 @@ peerHandler sess torst peerSt s = bracket
                 handler sess peerSt
             run iter
 
-handler :: Session -> PeerSt -> PeerMsg -> IO ()
+handler :: Session -> PeerSt -> PeerMsg -> IO Bool
 handler sess peerSt it@(Request pn offset len)   = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
@@ -88,9 +88,13 @@ handler sess peerSt it@(Request pn offset len)   = do
         pieceReqs' <- readTVar $ pieceReqs peerSt
         writeTVar (pieceReqs peerSt) $
             S.insert (pn, offset, len) pieceReqs'
-handler sess peerSt it                          =
+    -- Later, we will check if the peer manager says it's time to kill the
+    -- connection.
+    return True
+handler sess peerSt it                          = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
+    return True
 
 -- | The state associated with a peer connection. Used for communication
 -- between the reader thread, the writer thread and, when it's actually written,
@@ -123,15 +127,15 @@ peerWriter torst (PeerSt {pieceReqs = pieceReqs'}) s = loop
         loop
 
 -- Poor man's mapStreamM?
-foreachI :: Monad m => (el -> m ()) -> IterateeG [] el m ()
+foreachI :: Monad m => (el -> m Bool) -> IterateeG [] el m ()
 foreachI f = IterateeG step
     where
     step s@(EOF Nothing)    = return $ Done () s
     step   (EOF (Just err)) = return $ Cont (throwErr err) (Just err)
     step   (Chunk [])       = return $ Cont (foreachI f) Nothing
-    step   (Chunk xs)       = do
-        mapM_ f xs
-        return $ Cont (foreachI f) Nothing
+    step   (Chunk (x:xs))       = do
+        continue <- f x
+        if continue then step (Chunk xs) else return $ Done () (Chunk xs)
 
 -- Enumerator of BT PeerMsgs with length prefixes.
 enumPeerMsg :: (Monad m, Functor m) =>
@@ -144,7 +148,7 @@ enumPeerMsg = convStream convPeerMsgs
 
 getPeerMsg :: Monad m => IterateeG WrappedByteString Word8 m PeerMsg
 getPeerMsg = do
-    len :: Word32 <- joinI $ Iter.take 4 decodeI
+    len <- endianRead4 MSB
     case len of
         0 -> getPeerMsg -- Zero length messages are keepalives.
         _ -> joinI $ Iter.take (fromIntegral len) decodeI
@@ -157,7 +161,7 @@ enumSocket :: Socket -> EnumeratorGM WrappedByteString Word8 IO a
 enumSocket s iter = do
     bs <- SB.recv s 4096
     case B.length bs of
-        0 -> enumErr "Remote closed socket" iter
+        0 -> return iter
         _ -> do
             igv <- runIter iter (Chunk $ WrapBS bs)
             case igv of
