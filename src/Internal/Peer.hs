@@ -48,6 +48,9 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             maybeLogPeer sess peerSt Debug $ B.concat
                 ["Got handshake: ", (BC.pack $ show theirHandshake)]
+            if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
+                then error "Wrong infohash in outgoing peer connection!"
+                else return ()
             let
                 numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
                 (quot', rem') = quotRem numPieces 8
