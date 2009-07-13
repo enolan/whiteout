@@ -80,19 +80,21 @@ peerHandler sess torst peerSt s = bracket
             run iter
 
 handler :: Session -> PeerSt -> PeerMsg -> IO Bool
-handler sess peerSt it@(Request pn offset len)   = do
+handler sess peerSt it = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
-    atomically $ do
-        pieceReqs' <- readTVar $ pieceReqs peerSt
-        writeTVar (pieceReqs peerSt) $
-            S.insert (pn, offset, len) pieceReqs'
+    case it of
+        Request pn off len -> atomically $ do
+            pieceReqs' <- readTVar $ pieceReqs peerSt
+            writeTVar (pieceReqs peerSt) $
+                S.insert (pn, off, len) pieceReqs'
+        Cancel pn off len -> atomically $ do
+            pieceReqs' <- readTVar $ pieceReqs peerSt
+            writeTVar (pieceReqs peerSt) $
+                S.delete (pn, off, len) pieceReqs'
+        _ -> return ()
     -- Later, we will check if the peer manager says it's time to kill the
     -- connection.
-    return True
-handler sess peerSt it                          = do
-    maybeLogPeer sess peerSt Debug $ B.concat
-        ["Got message: ", BC.pack $ show it]
     return True
 
 -- | The state associated with a peer connection. Used for communication
