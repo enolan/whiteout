@@ -29,9 +29,9 @@ import Internal.Peer.Messages
 import Internal.Pieces
 import Internal.Types
 
--- | Connect to a new peer. Later this should add them to a queue and another
--- thread should empty the queue with a limit on the max open/half-open
--- connections.
+-- | Connect to a new peer. Later this should add them to a queue and the peer
+-- manager should empty the queue with a limit on the max concurrent
+-- open/half-open connections.
 addPeer :: Session -> TorrentSt -> String -> PortNumber -> IO ()
 addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
     where
