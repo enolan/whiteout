@@ -237,12 +237,14 @@ addTorrent sess tor path = case tFiles tor of
             torsts <- readTVar $ torrents sess
             completion <- newArray (bounds $ tPieceHashes tor) False
             activity <- newTVar Stopped
+            peers <- newTVar M.empty
             let
                 torst = TorrentSt {
                     sTorrent = tor,
                     sPath = path,
                     sCompletion = completion,
-                    sActivity = activity }
+                    sActivity = activity,
+                    sPeers = peers}
                 torsts' = M.insert (tInfohash tor) torst torsts
             writeTVar (torrents sess) torsts'
             return torst

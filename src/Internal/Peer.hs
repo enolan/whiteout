@@ -104,19 +104,6 @@ handler sess peerSt it = do
     -- connection.
     return True
 
--- | The state associated with a peer connection. Used for communication
--- between the reader thread, the writer thread and, when it's actually written,
--- the peer manager.
-data PeerSt = PeerSt {
-    pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
-    -- ^ Pieces in the pipeline, to be sent.
-    pName :: B.ByteString,
-    interested :: TVar Bool
-
-    -- Later we'll have a TChan of the have messages to send, dupTChan'd from
-    -- the global one, and a bitfield, and track choke/interest state here.
-    }
-
 peerWriter :: TorrentSt -> PeerSt -> Socket -> IO ()
 peerWriter torst (PeerSt {pieceReqs = pieceReqs'}) s = loop
     where
