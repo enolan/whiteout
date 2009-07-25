@@ -53,7 +53,7 @@ import System.Random
 
 import Internal.BEncode
 import Internal.Logging
-import Internal.Peer (addPeer)
+import Internal.Peers (addPeer)
 import Internal.Pieces
 import Internal.Types
 

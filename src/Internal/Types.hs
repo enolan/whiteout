@@ -5,7 +5,6 @@ module Internal.Types
     Torrent(..),
     Activity(..),
     LogLevel(..),
-    PeerSt(..),
     PieceNum
     ) where
 
@@ -13,8 +12,9 @@ import Control.Concurrent.STM
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
-import Data.Set (Set)
 import Data.Word (Word32)
+
+import {-# SOURCE #-} Internal.Peers.Handler (PeerSt)
 
 -- | A Whiteout session. Contains various internal state.
 data Session = Session {
@@ -70,16 +70,3 @@ data LogLevel = Debug -- ^ Messages of interest only for debugging Whiteout.
               -- ^ Problems which obstruct the primary functionality of Whiteout
               -- e.g. an error reading from disk.
     deriving (Show, Eq)
-
--- | The state associated with a peer connection. Used for communication
--- between the reader thread, the writer thread and, when it's actually written,
--- the peer manager.
-data PeerSt = PeerSt {
-    pieceReqs :: TVar (Set (PieceNum, Word32, Word32)),
-    -- ^ Pieces in the pipeline, to be sent.
-    pName :: ByteString,
-    interested :: TVar Bool
-
-    -- Later we'll have a TChan of the have messages to send, dupTChan'd from
-    -- the global one, and a bitfield, and track choke/interest state here.
-    }

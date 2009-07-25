@@ -1,6 +1,6 @@
--- This module exists so we can quickcheck the binary instances without exposing
--- the types in Internal.Peer
-module Internal.Peer.Messages
+-- This module exists so we can test the message (de)serialization without
+-- exposing it from Internal.Peers.Handler
+module Internal.Peers.Handler.Messages
     (
     Handshake(..),
     PeerMsg(..),

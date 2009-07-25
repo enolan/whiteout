@@ -1,5 +1,6 @@
-module Internal.Peer
+module Internal.Peers.Handler
     (
+    PeerSt(..),
     addPeer
     ) where
 
@@ -25,9 +26,23 @@ import qualified Network.Socket.ByteString.Lazy as SBL
 import qualified Text.Show.ByteString as SBS
 
 import Internal.Logging (maybeLog)
-import Internal.Peer.Messages
+import Internal.Peers.Handler.Messages
 import Internal.Pieces
 import Internal.Types
+
+-- | The state associated with a peer connection. Used for communication
+-- between the reader thread, the writer thread and, when it's actually written,
+-- the peer manager.
+data PeerSt = PeerSt {
+    pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
+    -- ^ Pieces in the pipeline, to be sent.
+    pName :: B.ByteString,
+    -- ^ Human-readable name for the peer e.g. "127.0.0.1:23000"
+    interested :: TVar Bool
+
+    -- Later we'll have a TChan of the have messages to send, dupTChan'd from
+    -- the global one, and a bitfield, and track choke/interest state here.
+    }
 
 -- | Connect to a new peer. Later this should add them to a queue and the peer
 -- manager should empty the queue with a limit on the max concurrent

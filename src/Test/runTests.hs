@@ -5,13 +5,13 @@ import Test.Framework
 
 import Network.Whiteout
 import Test.Internal.BEncode
-import Test.Internal.Peer.Messages
+import Test.Internal.Peers.Handler.Messages
 import Test.Network.Whiteout
 
 tests :: [Test]
 tests = [
     Test.Internal.BEncode.theTests,
-    Test.Internal.Peer.Messages.theTests,
+    Test.Internal.Peers.Handler.Messages.theTests,
     Test.Network.Whiteout.theTests
     ]
 

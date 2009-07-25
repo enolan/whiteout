@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module Test.Internal.Peer.Messages (theTests) where
+module Test.Internal.Peers.Handler.Messages (theTests) where
 
 import Control.Applicative
 import Control.Monad (ap, replicateM)
@@ -14,7 +14,7 @@ import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
 
 import Test.ArbitraryInstances ()
-import Internal.Peer.Messages
+import Internal.Peers.Handler.Messages
 
 theTests :: Test
 theTests = testGroup "Internal.Peer.Messages" [
