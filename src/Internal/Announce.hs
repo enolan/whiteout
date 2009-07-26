@@ -52,5 +52,6 @@ mkAnnounceQString sess torst at = urlEncodeVars vars
         ("uploaded", "0"),
         ("downloaded", "0"),
         ("left", "0"),
-        ("compact", "1") -- Packed address + port info.
+        ("compact", "1")
+        -- ^ Request packed address + port info, rather than a bencoded list.
         ] ++ (maybe [] (\at'-> [("event", show at')]) at)
