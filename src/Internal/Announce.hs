@@ -1,6 +1,6 @@
 module Internal.Announce
     (
-    AnnounceType,
+    AEvent,
     announce
     )
     where

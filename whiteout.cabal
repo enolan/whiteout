@@ -23,8 +23,9 @@ Library
                         parsec == 2.*, random == 1.0.*, SHA == 1.4.*,
                         stm == 2.*, transformers == 0.1.*
     Exposed-modules:    Network.Whiteout
-    Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
-                        Internal.Logging, Internal.Peers, Internal.Peers.Handler,
+    Other-modules:      Internal.Announce, Internal.BEncode,
+                        Internal.BEncode.Lexer, Internal.Logging,
+                        Internal.Peers, Internal.Peers.Handler,
                         Internal.Peers.Handler.Messages, Internal.Pieces,
                         Internal.Types
     Hs-source-dirs:     src
@@ -43,8 +44,9 @@ Executable runTests
                         parsec == 2.*, QuickCheck == 2.*, random == 1.0.*,
                         SHA == 1.4.*, stm == 2.*, test-framework,
                         test-framework-hunit, test-framework-quickcheck2
-    Other-modules:      Internal.BEncode, Internal.BEncode.Lexer,
-                        Internal.Logging, Internal.Peers, Internal.Peers.Handler,
+    Other-modules:      Internal.Announce, Internal.BEncode,
+                        Internal.BEncode.Lexer, Internal.Logging,
+                        Internal.Peers, Internal.Peers.Handler,
                         Internal.Peers.Handler.Messages, Internal.Pieces,
                         Internal.Types Network.Whiteout, Test.ArbitraryInstances
                         Test.Internal.BEncode,
