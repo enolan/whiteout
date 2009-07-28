@@ -1,11 +1,9 @@
 module Internal.BEncode
-  (
-   -- * Data types
-   BEncode(..),  
-   -- * Functions
-   bRead,
-   bPack
-  )
+    (
+    BEncode(..),
+    bRead,
+    bPack
+    )
 where
 
 import Data.Binary (Binary(..), Put)
