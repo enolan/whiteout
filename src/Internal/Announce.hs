@@ -63,7 +63,7 @@ mkAnnounceQString sess torst at = urlEncodeVars vars
         ("downloaded", "0"),
         ("left", "0"),
         ("compact", "1")
-        -- ^ Request packed address + port info, rather than a bencoded list.
+        -- Request packed address + port info, rather than a bencoded list.
         ] ++ (maybe [] (\at'-> [("event", show at')]) at)
 
 data AnnounceResp = AnnounceResp
