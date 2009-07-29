@@ -2,7 +2,12 @@ module Internal.BEncode
     (
     BEncode(..),
     bRead,
-    bPack
+    bPack,
+    -- * Helpers
+    getInt,
+    getString,
+    getList,
+    getDict
     )
 where
 
@@ -108,3 +113,25 @@ bPut (BDict d)   = put 'd' >>
                      (\(k,v) -> bPut (BString k) >> bPut v)
                      (Map.toList d) >>
                    put 'e'
+
+-- | The get* family of functions make writing code that extracts from BEncoded
+-- data a little easier.
+getInt :: BEncode -> Maybe Integer
+getInt i = case i of
+    BInt i' -> Just i'
+    _       -> Nothing
+
+getString :: BEncode -> Maybe ByteString
+getString s = case s of
+    BString s' -> Just s'
+    _          -> Nothing
+
+getList :: BEncode -> Maybe [BEncode]
+getList l = case l of
+    BList l' -> Just l'
+    _        -> Nothing
+
+getDict :: BEncode -> Maybe (Map ByteString BEncode)
+getDict d = case d of
+    BDict d' -> Just d'
+    _        -> Nothing

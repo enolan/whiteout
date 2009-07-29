@@ -108,19 +108,6 @@ toTorrent benc = do
          tFiles = files
         } >>= checkLength
     where
-        --The get* could probably all be replaced with something using generics.
-        getInt i = case i of
-            BInt i' -> Just i'
-            _       -> Nothing
-        getString s = case s of
-            BString s' -> Just s'
-            _          -> Nothing
-        getList l = case l of
-            BList l' -> Just l'
-            _        -> Nothing
-        getDict d = case d of
-            BDict d' -> Just d'
-            _        -> Nothing
         extractHashes hs = if (B.length hs `mod` 20) == 0
             then Just $ groupHashes hs
             else Nothing
