@@ -1,5 +1,6 @@
 import Control.Concurrent
 import Control.Concurrent.STM.TChan
+import Network.Socket
 import System.Environment
 import Test.Framework
 
@@ -40,5 +41,6 @@ singleseed host port = do
         "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
     torst <- addTorrent sess tor
         "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3"
-    addPeer sess torst host $ fromIntegral $ (read port :: Int)
+    host' <- inet_addr host
+    addPeer sess torst host' $ fromIntegral $ (read port :: Int)
     threadDelay $ 3*1000000 -- 3 seconds should be enough.

@@ -6,6 +6,7 @@ module Internal.Announce
     where
 
 import Control.Applicative
+import Control.Concurrent.STM (atomically)
 import Data.Binary.Get
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
@@ -16,6 +17,8 @@ import Network.Socket
 import Network.URI
 
 import Internal.BEncode
+import Internal.Logging
+import Internal.Peers
 import Internal.Types
 
 -- | Kinds of events.
@@ -32,11 +35,18 @@ instance Show AEvent where
     show ACompleted  = "completed"
     show AStopped    = "stopped"
 
+-- | Announce to the tracker and add the resultant peers. Returns the tracker's
+-- requested announce interval. May throw ErrorCalled exceptions.
 announce ::
-    Session -> TorrentSt -> (Maybe AEvent) ->
-    IO (Either (Maybe BC.ByteString) AnnounceResp)
+    Session -> TorrentSt -> (Maybe AEvent) -> IO Integer
 announce sess torst at = do
-    print uri
+    atomically . maybeLog sess Medium $ BC.concat
+        ["Announcing torrent \"",
+        tName . sTorrent $ torst,
+        "\", with URI \"",
+        BC.pack uri,
+        "\""
+        ]
     case parseURI uri of
         Just uri' -> do
             let req = mkRequest GET uri'
@@ -44,8 +54,15 @@ announce sess torst at = do
             case res of
                 Left _  -> error "Eep, download failed in announce"
                 Right r -> case bRead (rspBody r) of
-                    Just x -> return . decodeAnnounceResp $ x
                     Nothing -> error "couldn't decode response!"
+                    Just x -> case decodeAnnounceResp x of
+                        Left Nothing -> error "Error decoding announce response."
+                        Left (Just err) -> error $
+                            "Got error from tracker: " ++ BC.unpack err
+                        Right (AnnounceResp
+                            {interval = interval', peers = peers'}) -> do
+                            mapM_ (uncurry $ addPeer sess torst) peers'
+                            return interval'
         Nothing -> error "couldn't parse URI in announce"
     where
     uri = BC.unpack (tAnnounce $ sTorrent torst) ++ "?" ++

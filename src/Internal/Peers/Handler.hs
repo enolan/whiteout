@@ -23,6 +23,7 @@ import qualified Data.Set as S
 import Network.Socket hiding (Debug) -- clashes with the LogLevel
 import qualified Network.Socket.ByteString as SB
 import qualified Network.Socket.ByteString.Lazy as SBL
+import System.IO.Unsafe (unsafePerformIO)
 import qualified Text.Show.ByteString as SBS
 
 import Internal.Logging (maybeLog)
@@ -47,7 +48,7 @@ data PeerSt = PeerSt {
 -- | Connect to a new peer. Later this should add them to a queue and the peer
 -- manager should empty the queue with a limit on the max concurrent
 -- open/half-open connections.
-addPeer :: Session -> TorrentSt -> String -> PortNumber -> IO ()
+addPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> IO ()
 addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
     where
         go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
@@ -59,8 +60,7 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
                     interested = interested'
                     }
             maybeLogPeer sess peerSt Low "Connecting"
-            addr <- inet_addr h
-            connect s $ SockAddrInet p addr
+            connect s $ SockAddrInet p h
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             maybeLogPeer sess peerSt Debug $ B.concat
@@ -86,7 +86,8 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             ["Caught exception in peer handler. ", peerName, ": ",
              BC.pack $ show e]
         peerName = B.concat
-            [BC.pack h, ":", BC.pack $ show (fromIntegral p :: Int)]
+            [BC.pack (unsafePerformIO . inet_ntoa $ h), ":",
+             BC.pack $ show (fromIntegral p :: Int)]
 
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket
