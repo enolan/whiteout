@@ -72,7 +72,7 @@ loadTorrentFromURL u =
             let req = mkRequest GET uri'
             res <- simpleHTTP req
             case res of
-                Left _  -> throw HTTPDownloadFailed
+                Left _  -> throwIO HTTPDownloadFailed
                 Right r -> return $ loadTorrent $ rspBody r
         Nothing   -> throw CouldntParseURL
 
@@ -189,7 +189,7 @@ addTorrent sess tor path = case tFiles tor of
         ok <- checkFile (len,path)
         if ok
             then atomically addTorrent'
-            else throw BadFiles
+            else throwIO BadFiles
     Right fs -> do
         e <- doesDirectoryExist path
         if e
@@ -200,9 +200,9 @@ addTorrent sess tor path = case tFiles tor of
                         ok <- and <$> mapM (checkFile . addprefix) fs
                         if ok
                             then atomically addTorrent'
-                            else throw BadFiles
-                    else throw BadFiles
-            else throw BadFiles
+                            else throwIO BadFiles
+                    else throwIO BadFiles
+            else throwIO BadFiles
     where
         addprefix (l,p) = (l, path </> p)
         checkFile :: (Integer, FilePath) -> IO Bool
@@ -254,7 +254,7 @@ beginVerifyingTorrent sess torst = do
             atomically $ writeTVar (sActivity torst) Verifying
             forkIO (verify 0)
             return ()
-        _ -> throw BadState
+        _ -> throwIO BadState
     where
         verify :: PieceNum -> IO ()
         verify piecenum = do
