@@ -1,7 +1,7 @@
 module Internal.Peers.Handler
     (
     PeerSt(..),
-    addPeer
+    connectToPeer
     ) where
 
 import Control.Applicative
@@ -45,11 +45,9 @@ data PeerSt = PeerSt {
     -- the global one, and a bitfield, and track choke/interest state here.
     }
 
--- | Connect to a new peer. Later this should add them to a queue and the peer
--- manager should empty the queue with a limit on the max concurrent
--- open/half-open connections.
-addPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> IO ()
-addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
+-- | Connect to a new peer.
+connectToPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> IO ()
+connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
     where
         go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
             reqQueue <- newTVarIO S.empty
@@ -60,7 +58,11 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
                     interested = interested'
                     }
             maybeLogPeer sess peerSt Low "Connecting"
-            connect s $ SockAddrInet p h
+            let connectionsInProgress = sConnectionsInProgress torst
+            bracket_
+                (atomically $ modifyTVar connectionsInProgress (+ 1))
+                (atomically $ modifyTVar connectionsInProgress (subtract 1))
+                (connect s $ SockAddrInet p h)
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             maybeLogPeer sess peerSt Debug $ B.concat
@@ -88,6 +90,9 @@ addPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
         peerName = B.concat
             [BC.pack (unsafePerformIO . inet_ntoa $ h), ":",
              BC.pack $ show (fromIntegral p :: Int)]
+
+modifyTVar :: TVar a -> (a -> a) -> STM ()
+modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket

@@ -5,14 +5,18 @@ module Internal.Types
     Torrent(..),
     Activity(..),
     LogLevel(..),
+    WhiteoutException(..),
     PieceNum
     ) where
 
 import Control.Concurrent.STM
+import Control.Exception
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
+import Data.Typeable
 import Data.Word (Word32)
+import Network.Socket (HostAddress, PortNumber)
 
 import {-# SOURCE #-} Internal.Peers.Handler (PeerSt)
 
@@ -33,7 +37,10 @@ data TorrentSt = TorrentSt {
     sCompletion :: TArray PieceNum Bool,
     sActivity :: TVar Activity,
     -- | Map from peerIds to peers.
-    sPeers :: TVar (M.Map ByteString PeerSt)
+    sPeers :: TVar (M.Map ByteString PeerSt),
+    -- | How many connection attempts are in progress.
+    sConnectionsInProgress :: TVar Int,
+    sPotentialPeers :: TVar [(HostAddress, PortNumber)]
     }
 
 -- | The static information about a torrent, i.e. that stored in a file named
@@ -59,6 +66,7 @@ data Torrent = Torrent {
 data Activity =
     Stopped
   | Verifying
+  | Running
     deriving (Eq, Ord, Show)
 
 type PieceNum = Word32
@@ -70,3 +78,15 @@ data LogLevel = Debug -- ^ Messages of interest only for debugging Whiteout.
               -- ^ Problems which obstruct the primary functionality of Whiteout
               -- e.g. an error reading from disk.
     deriving (Show, Eq)
+
+data WhiteoutException =
+    CouldntParseTorrent
+  | HTTPDownloadFailed
+  | CouldntParseURL
+  | BadState
+  -- ^ Tried to perform some action on a torrent precluded by the current state
+  -- of the torrent. E.g. Tried to verify a torrent that is already Verifying.
+  | BadFiles
+    deriving (Show, Typeable, Eq)
+
+instance Exception WhiteoutException

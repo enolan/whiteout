@@ -32,6 +32,7 @@ verifyGeneric torpath datapath expectedResult = do
         case activity of
             Verifying -> retry
             Stopped -> return ()
+            Running -> error "Ghost started torrent."
     let (0, maxPieceNum) = bounds $ tPieceHashes tor
     allExpected <- and <$> atomically
         (mapM

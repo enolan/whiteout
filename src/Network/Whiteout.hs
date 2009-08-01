@@ -23,6 +23,7 @@ module Network.Whiteout
 -- *Operations on torrents
     addTorrent,
     beginVerifyingTorrent,
+    startTorrent,
     addPeer,
 -- *Miscellany
     WhiteoutException(..)
@@ -41,7 +42,6 @@ import qualified Data.ByteString.Lazy as L
 import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
-import Data.Typeable
 import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
@@ -53,7 +53,7 @@ import System.Random
 
 import Internal.BEncode
 import Internal.Logging
-import Internal.Peers (addPeer)
+import Internal.Peers (addPeer, startTorrent)
 import Internal.Pieces
 import Internal.Types
 
@@ -225,13 +225,17 @@ addTorrent sess tor path = case tFiles tor of
             completion <- newArray (bounds $ tPieceHashes tor) False
             activity <- newTVar Stopped
             peers <- newTVar M.empty
+            connectionsInProgress <- newTVar 0
+            potentialPeers <- newTVar []
             let
                 torst = TorrentSt {
                     sTorrent = tor,
                     sPath = path,
                     sCompletion = completion,
                     sActivity = activity,
-                    sPeers = peers}
+                    sPeers = peers,
+                    sConnectionsInProgress = connectionsInProgress,
+                    sPotentialPeers = potentialPeers}
                 torsts' = M.insert (tInfohash tor) torst torsts
             writeTVar (torrents sess) torsts'
             return torst
@@ -274,15 +278,3 @@ beginVerifyingTorrent sess torst = do
                         (snd $ bounds $ tPieceHashes $ sTorrent torst)
                         then atomically $ writeTVar (sActivity torst) Stopped
                         else verify (piecenum+1)
-
-data WhiteoutException =
-    CouldntParseTorrent
-  | HTTPDownloadFailed
-  | CouldntParseURL
-  | BadState
-  -- ^ Tried to perform some action on a torrent precluded by the current state
-  -- of the torrent. E.g. Tried to verify a torrent that is already Verifying.
-  | BadFiles
-    deriving (Show, Typeable, Eq)
-
-instance Exception WhiteoutException

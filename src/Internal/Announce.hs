@@ -61,7 +61,7 @@ announce sess torst at = do
                             "Got error from tracker: " ++ BC.unpack err
                         Right (AnnounceResp
                             {interval = interval', peers = peers'}) -> do
-                            mapM_ (uncurry $ addPeer sess torst) peers'
+                            atomically $ setPeerList torst peers'
                             return interval'
         Nothing -> error "couldn't parse URI in announce"
     where
