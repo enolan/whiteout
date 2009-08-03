@@ -29,9 +29,16 @@ main = do
 usage :: String
 usage = unlines [
     "Usage is one of:",
-    "runTests",
-    "runTests singleseed host port",
-    "runTests tf tfoptions"]
+    "  runTests",
+    "  runTests tf tfoptions",
+    "  runTests singleseed host port", "",
+    "The first runs the QC & HUnit tests via test-framework with no options.", "",
+    "The second does the same but with the arguments after \"tf\" passed to",
+    "test-framework.", "",
+    "The third connects to a running bt client on the given host and port",
+    "and seeds the torrent in the file:",
+    "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
+    ]
 
 singleseed :: String -> String -> IO ()
 singleseed host port = do
