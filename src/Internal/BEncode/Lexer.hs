@@ -1,15 +1,14 @@
 module Internal.BEncode.Lexer where
 
 import Data.Char
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 
 data Token
     = TDict
     | TList
     | TInt
-    | TString ByteString
+    | TString B.ByteString
     | TNumber Integer
     | TEnd
       deriving (Show,Eq)
@@ -33,7 +32,7 @@ lexer fs
                        then Just [TNumber number]
                        else case L.head rest' of
                               ':' -> let (str, rest'') = L.splitAt (fromIntegral number) (L.tail rest')
-                                     in fmap (TString (BS.concat $ L.toChunks str) :) (lexer rest'')
+                                     in fmap (TString (B.concat $ L.toChunks str) :) (lexer rest'')
                               _ -> fmap (TNumber number :) (lexer rest')
           | otherwise -> Nothing
     where ch = L.head fs

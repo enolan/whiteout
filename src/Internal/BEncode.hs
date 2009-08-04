@@ -13,8 +13,7 @@ where
 
 import Data.Binary (Binary(..), Put)
 import Data.Binary.Put (putByteString, runPut)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -30,9 +29,9 @@ type BParser a = GenParser Token () a
      data type here
 -}
 data BEncode = BInt Integer
-	     | BString ByteString
+	     | BString B.ByteString
 	     | BList [BEncode]
-             | BDict (Map ByteString BEncode)
+             | BDict (Map B.ByteString BEncode)
 	       deriving (Eq, Ord, Show)
 
 -- Source possition is pretty useless in BEncoded data. FIXME
@@ -52,7 +51,7 @@ tnumber = token' fn
     where fn (TNumber i) = Just i
           fn _ = Nothing
 
-tstring :: BParser ByteString
+tstring :: BParser B.ByteString
 tstring = token' fn
     where fn (TString str) = Just str
           fn _ = Nothing
@@ -106,7 +105,7 @@ bPack = runPut . bPut
 
 bPut :: BEncode -> Put
 bPut (BInt i)    = put 'i' >> SBS.showp i >> put 'e'
-bPut (BString s) = SBS.showp (BS.length s) >> put ':' >> putByteString s
+bPut (BString s) = SBS.showp (B.length s) >> put ':' >> putByteString s
 bPut (BList l)   = put 'l' >> mapM_ bPut l >> put 'e'
 bPut (BDict d)   = put 'd' >>
                    mapM_ 
@@ -121,7 +120,7 @@ getInt i = case i of
     BInt i' -> Just i'
     _       -> Nothing
 
-getString :: BEncode -> Maybe ByteString
+getString :: BEncode -> Maybe B.ByteString
 getString s = case s of
     BString s' -> Just s'
     _          -> Nothing
@@ -131,7 +130,7 @@ getList l = case l of
     BList l' -> Just l'
     _        -> Nothing
 
-getDict :: BEncode -> Maybe (Map ByteString BEncode)
+getDict :: BEncode -> Maybe (Map B.ByteString BEncode)
 getDict d = case d of
     BDict d' -> Just d'
     _        -> Nothing

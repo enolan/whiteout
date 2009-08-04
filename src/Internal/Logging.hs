@@ -3,8 +3,7 @@ module Internal.Logging where
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Monad (forever)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Char8 as B
 import System.IO
 
 import Internal.Types
@@ -24,5 +23,5 @@ logToFile :: FilePath -> TChan (LogLevel, B.ByteString) -> IO ()
 logToFile path chan = do
     forkIO $ withFile path WriteMode $ \h ->
         forever $
-            (atomically $ readTChan chan) >>= B.hPutStrLn h . BC.pack . show
+            (atomically $ readTChan chan) >>= B.hPutStrLn h . B.pack . show
     return ()

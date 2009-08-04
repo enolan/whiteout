@@ -36,8 +36,7 @@ import Control.Exception as C
 import Control.Monad (replicateM)
 import Data.Array.IArray ((!), bounds, listArray)
 import Data.Array.MArray (newArray, readArray, writeArray)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
 import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import qualified Data.Map as M
@@ -128,7 +127,7 @@ toTorrent benc = do
             d' <- getDict d
             fLength <- M.lookup "length" d' >>= getInt
             path <- M.lookup "path" d' >>= getList >>= mapM getString
-            let path' = joinPath $ map BC.unpack path
+            let path' = joinPath $ map B.unpack path
             Just (fLength,path')
         checkLength t = let
             len = either id (sum . map fst) $ tFiles t
@@ -160,7 +159,7 @@ initialize name ourLogChan = do
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
-    randompart <- BC.pack <$> replicateM 12 (randomRIO ('0','9'))
+    randompart <- B.pack <$> replicateM 12 (randomRIO ('0','9'))
     return $ B.concat ["-", nameandver, "-", randompart]
 
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
