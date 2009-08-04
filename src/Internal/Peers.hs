@@ -11,7 +11,7 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad (forever)
 import Data.ByteString.Char8 as BC
-import qualified Data.Map as M
+import qualified Data.Set as S
 import Network.Socket
 import System.IO.Unsafe
 
@@ -55,7 +55,7 @@ startTorrent sess torst = do
         (h,p) <- atomically $ do
             activePeers <- readTVar . sPeers $ torst
             connectionsInProgress <- readTVar . sConnectionsInProgress $ torst
-            if (M.size activePeers < 30) && (connectionsInProgress < 10)
+            if (S.size activePeers < 30) && (connectionsInProgress < 10)
                 then do
                     potentialPeers <- readTVar . sPotentialPeers $ torst
                     case potentialPeers of

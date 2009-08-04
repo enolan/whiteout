@@ -14,6 +14,7 @@ import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
+import Data.Function (on)
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
 import Data.Iteratee.Binary
@@ -39,11 +40,18 @@ data PeerSt = PeerSt {
     -- ^ Pieces in the pipeline, to be sent.
     pName :: B.ByteString,
     -- ^ Human-readable name for the peer e.g. "127.0.0.1:23000"
+    peerId :: B.ByteString,
     interested :: TVar Bool
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one, and a bitfield, and track choke/interest state here.
     }
+
+instance Eq PeerSt where
+    (==) = (==) `on` peerId
+
+instance Ord PeerSt where
+    compare = compare `on` peerId
 
 -- | Connect to a new peer.
 connectToPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> IO ()
@@ -55,12 +63,13 @@ connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             let peerSt = PeerSt {
                     pieceReqs = reqQueue,
                     pName = peerName,
+                    peerId = undefined, -- Ugh.
                     interested = interested'
                     }
             maybeLogPeer sess peerSt Low "Connecting"
             let connectionsInProgress = sConnectionsInProgress torst
             bracket_
-                (atomically $ modifyTVar connectionsInProgress (+ 1))
+                (return ())
                 (atomically $ modifyTVar connectionsInProgress (subtract 1))
                 (connect s $ SockAddrInet p h)
             sendHandshake sess torst s
@@ -77,7 +86,11 @@ connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
                     fromIntegral $ if rem' /= 0 then quot'+1 else quot'
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
             sendPeerMsg s Unchoke
-            peerHandler sess torst peerSt s
+            let peerSt' = peerSt {peerId = hPeerId theirHandshake}
+            bracket_
+                (atomically $ modifyTVar (sPeers torst) (S.insert peerSt'))
+                (atomically $ modifyTVar (sPeers torst) (S.delete peerSt'))
+                (peerHandler sess torst peerSt s)
             maybeLogPeer sess peerSt Debug "Disconnecting (normal)."
         handlers = [
             Handler (\(e :: IOException) -> handleEx e),

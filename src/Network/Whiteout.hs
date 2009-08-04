@@ -42,6 +42,7 @@ import qualified Data.ByteString.Lazy as L
 import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as S
 import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
@@ -224,7 +225,7 @@ addTorrent sess tor path = case tFiles tor of
             torsts <- readTVar $ torrents sess
             completion <- newArray (bounds $ tPieceHashes tor) False
             activity <- newTVar Stopped
-            peers <- newTVar M.empty
+            peers <- newTVar S.empty
             connectionsInProgress <- newTVar 0
             potentialPeers <- newTVar []
             let

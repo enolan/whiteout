@@ -14,6 +14,7 @@ import Control.Exception
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
+import Data.Set (Set)
 import Data.Typeable
 import Data.Word (Word32)
 import Network.Socket (HostAddress, PortNumber)
@@ -37,7 +38,7 @@ data TorrentSt = TorrentSt {
     sCompletion :: TArray PieceNum Bool,
     sActivity :: TVar Activity,
     -- | Map from peerIds to peers.
-    sPeers :: TVar (M.Map ByteString PeerSt),
+    sPeers :: TVar (Set PeerSt),
     -- | How many connection attempts are in progress.
     sConnectionsInProgress :: TVar Int,
     sPotentialPeers :: TVar [(HostAddress, PortNumber)]
