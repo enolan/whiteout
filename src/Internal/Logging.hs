@@ -19,6 +19,8 @@ logToConsole chan = do
     forkIO $ forever $ (atomically $ readTChan chan) >>= print
     return ()
 
+-- | Directs the passed logging channel to a given file. Overwrites the content
+-- of the file.
 logToFile :: FilePath -> TChan (LogLevel, B.ByteString) -> IO ()
 logToFile path chan = do
     forkIO $ withFile path WriteMode $ \h ->

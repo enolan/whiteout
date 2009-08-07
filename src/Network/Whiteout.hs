@@ -9,7 +9,10 @@ module Network.Whiteout
 -- *Whiteout state
     Session(),
     TorrentSt(),
+    getActiveTorrents,
+    isPieceComplete,
     Activity(..),
+    getActivity,
     sTorrent,
     sPath,
     LogLevel(..),
@@ -17,9 +20,6 @@ module Network.Whiteout
     logToFile,
     initialize,
     close,
-    getActiveTorrents,
-    isPieceComplete,
-    getActivity,
 -- *Operations on torrents
     addTorrent,
     beginVerifyingTorrent,
