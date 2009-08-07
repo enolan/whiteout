@@ -99,8 +99,10 @@ connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             maybeLogPeer sess peerSt Debug "Disconnecting (normal)."
         handlers = [
             Handler (\(e :: IOException) -> handleEx e),
-            Handler (\(e :: ErrorCall) -> handleEx e)
+            Handler (\(e :: ErrorCall) -> handleEx e),
+            Handler (\(e :: AsyncException) -> handleAsync e)
             ]
+        handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
         handleEx :: Show e => e -> IO ()
         handleEx e = atomically $ maybeLog sess Medium $ B.concat
             ["Caught exception in peer handler. ", peerName, ": ",
