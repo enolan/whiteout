@@ -249,13 +249,14 @@ addTorrent sess tor path = case tFiles tor of
 -- 'Stopped'.
 beginVerifyingTorrent :: Session -> TorrentSt -> IO ()
 beginVerifyingTorrent sess torst = do
-    a <- atomically $ getActivity torst
-    case a of
-        Stopped -> do
-            atomically $ writeTVar (sActivity torst) Verifying
-            forkIO (verify 0)
-            return ()
-        _ -> throwIO BadState
+    ok <- atomically $ do
+        activity <- getActivity torst
+        case activity of
+            Stopped -> writeTVar (sActivity torst) Verifying >> return True
+            _       -> return False
+    if ok
+        then forkIO (verify 0) >> return ()
+        else throwIO BadState
     where
         verify :: PieceNum -> IO ()
         verify piecenum = do
