@@ -5,7 +5,7 @@ module Internal.Peers.Handler
     ) where
 
 import Control.Applicative
-import Control.Concurrent (forkIO, killThread)
+import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
 import Data.Array.IArray (bounds)
@@ -41,7 +41,10 @@ data PeerSt = PeerSt {
     pName :: B.ByteString,
     -- ^ Human-readable name for the peer e.g. "127.0.0.1:23000"
     peerId :: B.ByteString,
-    interested :: TVar Bool
+    interested :: TVar Bool,
+    pThreadId :: ThreadId
+    -- ^ So the peer manager can kill the thread, thus closing the peer
+    -- connection.
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one, and a bitfield, and track choke/interest state here.
@@ -60,11 +63,13 @@ connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
         go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
             reqQueue <- newTVarIO S.empty
             interested' <- newTVarIO False
+            threadId <- myThreadId
             let peerSt = PeerSt {
                     pieceReqs = reqQueue,
                     pName = peerName,
                     peerId = undefined, -- Ugh.
-                    interested = interested'
+                    interested = interested',
+                    pThreadId = threadId
                     }
             maybeLogPeer sess peerSt Low "Connecting"
             let connectionsInProgress = sConnectionsInProgress torst
@@ -134,8 +139,6 @@ handler sess peerSt it = do
         Interested -> atomically $ writeTVar (interested peerSt) True
         NotInterested -> atomically $ writeTVar (interested peerSt) False
         _ -> return ()
-    -- Later, we will check if the peer manager says it's time to kill the
-    -- connection.
     return True
 
 peerWriter :: TorrentSt -> PeerSt -> Socket -> IO ()

@@ -65,9 +65,13 @@ data Torrent = Torrent {
 
 -- | What is being done with a torrent at a given moment.
 data Activity =
-    Stopped
+    Stopped -- ^ Twiddling its thumbs.
+  | Stopping
+  -- ^ Closing its peer connections in preparation for thumb-twiddling.
   | Verifying
+  -- ^ Checking the piece hashes.
   | Running
+  -- ^ Actively seeking and sending pieces to peers.
     deriving (Eq, Ord, Show)
 
 type PieceNum = Word32

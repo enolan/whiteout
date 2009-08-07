@@ -24,6 +24,7 @@ module Network.Whiteout
     addTorrent,
     beginVerifyingTorrent,
     startTorrent,
+    stopTorrent,
     addPeer,
 -- *Miscellany
     WhiteoutException(..)
@@ -53,7 +54,7 @@ import System.Random
 
 import Internal.BEncode
 import Internal.Logging
-import Internal.Peers (addPeer, startTorrent)
+import Internal.Peers
 import Internal.Pieces
 import Internal.Types
 
