@@ -128,14 +128,10 @@ handler sess peerSt it = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
     case it of
-        Request pn off len -> atomically $ do
-            pieceReqs' <- readTVar $ pieceReqs peerSt
-            writeTVar (pieceReqs peerSt) $
-                S.insert (pn, off, len) pieceReqs'
-        Cancel pn off len -> atomically $ do
-            pieceReqs' <- readTVar $ pieceReqs peerSt
-            writeTVar (pieceReqs peerSt) $
-                S.delete (pn, off, len) pieceReqs'
+        Request pn off len -> atomically $
+            modifyTVar (pieceReqs peerSt) $ S.insert (pn, off, len)
+        Cancel pn off len -> atomically $
+            modifyTVar (pieceReqs peerSt) $ S.delete (pn, off, len)
         Interested -> atomically $ writeTVar (interested peerSt) True
         NotInterested -> atomically $ writeTVar (interested peerSt) False
         _ -> return ()
