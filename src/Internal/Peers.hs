@@ -40,18 +40,14 @@ addPeer sess torst h p = do
 -- | Stop seeding a torrent. The torrent's 'Activity' will be 'Stopping' for a
 -- moment, then will transition to 'Stopped'. Will throw 'BadState' if the
 -- torrent is not 'Running' when this is called.
-stopTorrent :: Session -> TorrentSt -> IO ()
+stopTorrent :: Session -> TorrentSt -> STM ()
 stopTorrent sess torst = do
-    atomically . maybeLog sess Medium . BC.concat $
+    maybeLog sess Medium . BC.concat $
         ["Stopping torrent \"", tName . sTorrent $ torst, "\""]
-    ok <- atomically $ do
-        activity <- readTVar . sActivity $ torst
-        case activity of
-            Running -> writeTVar (sActivity torst) Stopping >> return True
-            _ -> return False
-    if ok
-        then return ()
-        else throwIO BadState
+    activity <- readTVar . sActivity $ torst
+    case activity of
+        Running -> writeTVar (sActivity torst) Stopping
+        _       -> throw BadState
 
 -- | Start seeding a torrent. Will throw 'BadState' if the torrent is not
 -- 'Stopped' when this is called.

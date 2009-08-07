@@ -30,6 +30,8 @@ module Network.Whiteout
     WhiteoutException(..)
     ) where
 
+import Prelude hiding (mapM_)
+
 import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
@@ -40,6 +42,7 @@ import Data.Array.MArray (newArray, readArray, writeArray)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
 import Data.Digest.Pure.SHA (bytestringDigest, sha1)
+import Data.Foldable (mapM_)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as S
@@ -166,7 +169,14 @@ genPeerId nameandver = do
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
 -- Run this before exiting.
 close :: Session -> IO ()
-close _ = return ()
+close sess = do
+    atomically $ readTVar (torrents sess) >>= mapM_ (stopTorrent sess)
+    atomically $ do
+        torrents' <- M.elems <$> readTVar (torrents sess)
+        activities <- mapM (readTVar . sActivity) torrents'
+        if and . map (== Stopped) $ activities
+            then return ()
+            else retry
 
 -- | Get the currently active torrents, keyed by infohash. A torrent is active
 -- as long as it has been 'addTorrent'ed; one can be simultaneous active and
