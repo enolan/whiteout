@@ -174,7 +174,7 @@ close sess = do
     atomically $ do
         torrents' <- M.elems <$> readTVar (torrents sess)
         activities <- mapM (readTVar . sActivity) torrents'
-        if and . map (== Stopped) $ activities
+        if all (== Stopped) $ activities
             then return ()
             else retry
 
