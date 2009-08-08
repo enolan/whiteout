@@ -11,7 +11,7 @@ import Prelude hiding (mapM_)
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
-import Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Char8 as BC
 import Data.Foldable (mapM_)
 import qualified Data.Set as S
 import Network.Socket
@@ -63,58 +63,70 @@ startTorrent sess torst = do
         else throwIO BadState
     atomically . maybeLog sess Medium . BC.concat $
         ["Starting torrent: \"", tName . sTorrent $ torst, "\""]
-    forkIO go
+    forkIO $ peerManager sess torst
     return ()
-    where
-    -- This is the peer manager. There is a peer manager for each running
-    -- torrent. It handles new peer connections and cleaning up when we stop a
-    -- torrent. Soon it will handle choking/unchoking, disconnecting
-    -- unproductive peers, and announcing.
-    go = do
-        whatNext <- atomically $ wereDone `orElse` getNextPeer
-        case whatNext of
-            Just (h,p) -> connectToPeer sess torst h p >> go
-            Nothing -> do
-                -- We need to wait for pending connections to finish to avoid
-                -- a race; otherwise it would be possible for new peer
-                -- connections to be formed after we stop the torrent.
-                atomically $ do
-                    connectionsInProgress <-
-                        readTVar $ sConnectionsInProgress torst
-                    if connectionsInProgress == 0
-                        then return ()
-                        else retry
-                peers <- atomically . readTVar $ sPeers torst
-                -- Foldable mapM_, not [] mapM_
-                mapM_ (killThread . pThreadId) peers
-                atomically $ do
-                    peerSts <- readTVar $ sPeers torst
-                    if S.null peerSts
-                        then return ()
-                        else retry
-                atomically $ writeTVar (sActivity torst) Stopped
-    getNextPeer = do
-        activePeers <- readTVar . sPeers $ torst
-        connectionsInProgress <- readTVar . sConnectionsInProgress $ torst
-        if (S.size activePeers < 30) && (connectionsInProgress < 10)
-            then do
-                potentialPeers <- readTVar . sPotentialPeers $ torst
-                case potentialPeers of
-                    [] -> retry
-                    peer : peers -> do
-                        writeTVar (sPotentialPeers torst) peers
-                        writeTVar (sConnectionsInProgress torst) $
-                            connectionsInProgress + 1
-                        return $ Just peer
-            else retry
-    -- Bad name. Blocks until we're asked to stop the torrent, then returns
-    -- Nothing. For use in above orElse.
-    wereDone = do
-        activity <- readTVar . sActivity $ torst
-        case activity of
-            Running -> retry
-            Verifying -> error
-                "Invariant broken, verifying with peer manager running."
-            Stopped -> error
-                "Invariant broken, stopped with peer manager running."
-            Stopping -> return Nothing
+
+-- This is the peer manager. There is a peer manager for each running
+-- torrent. It handles new peer connections and cleaning up when we stop a
+-- torrent. Soon it will handle choking/unchoking, disconnecting
+-- unproductive peers, and announcing.
+
+data PeerManagerTask = ConnectToPeer HostAddress PortNumber
+                     | Exit
+
+peerManager :: Session -> TorrentSt -> IO ()
+peerManager sess torst = do
+    let alternatives = map ($ torst) [wereDone, getNextPeer]
+    whatNext <- atomically . foldr1 orElse $ alternatives
+    case whatNext of
+        ConnectToPeer h p -> do
+            connectToPeer sess torst h p
+            peerManager sess torst
+        Exit -> do
+            -- We need to wait for pending connections to finish to avoid
+            -- a race; otherwise it would be possible for new peer
+            -- connections to be formed after we stop the torrent.
+            atomically $ do
+                connectionsInProgress <-
+                    readTVar $ sConnectionsInProgress torst
+                if connectionsInProgress == 0
+                    then return ()
+                    else retry
+            peers <- atomically . readTVar $ sPeers torst
+            -- Foldable mapM_, not [] mapM_
+            mapM_ (killThread . pThreadId) peers
+            atomically $ do
+                peerSts <- readTVar $ sPeers torst
+                if S.null peerSts
+                    then return ()
+                    else retry
+            atomically $ writeTVar (sActivity torst) Stopped
+
+getNextPeer :: TorrentSt -> STM PeerManagerTask
+getNextPeer torst = do
+    activePeers <- readTVar . sPeers $ torst
+    connectionsInProgress <- readTVar . sConnectionsInProgress $ torst
+    if (S.size activePeers < 30) && (connectionsInProgress < 10)
+        then do
+            potentialPeers <- readTVar . sPotentialPeers $ torst
+            case potentialPeers of
+                [] -> retry
+                peer : peers -> do
+                    writeTVar (sPotentialPeers torst) peers
+                    writeTVar (sConnectionsInProgress torst) $
+                        connectionsInProgress + 1
+                    return $ uncurry ConnectToPeer peer
+        else retry
+
+-- Bad name. Blocks until we're asked to stop the torrent, then returns
+-- Exit. For use in above orElse.
+wereDone :: TorrentSt -> STM PeerManagerTask
+wereDone torst = do
+    activity <- readTVar . sActivity $ torst
+    case activity of
+        Running -> retry
+        Verifying -> error
+            "Invariant broken, verifying with peer manager running."
+        Stopped -> error
+            "Invariant broken, stopped with peer manager running."
+        Stopping -> return Exit
