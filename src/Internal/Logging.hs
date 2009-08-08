@@ -23,7 +23,8 @@ logToConsole chan = do
 -- of the file.
 logToFile :: FilePath -> TChan (LogLevel, B.ByteString) -> IO ()
 logToFile path chan = do
-    forkIO $ withFile path WriteMode $ \h ->
+    forkIO $ withFile path WriteMode $ \h -> do
+        hSetBuffering h LineBuffering
         forever $
-            (atomically $ readTChan chan) >>= B.hPutStrLn h . B.pack . show
+            (atomically $ readTChan chan) >>= hPrint h
     return ()
