@@ -236,7 +236,7 @@ addTorrent sess tor path = case tFiles tor of
             completion <- newArray (bounds $ tPieceHashes tor) False
             activity <- newTVar Stopped
             peers <- newTVar S.empty
-            connectionsInProgress <- newTVar 0
+            connectionsInProgress <- newTVar S.empty
             potentialPeers <- newTVar []
             let
                 torst = TorrentSt {

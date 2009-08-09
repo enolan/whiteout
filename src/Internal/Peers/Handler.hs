@@ -57,10 +57,25 @@ instance Ord PeerSt where
     compare = compare `on` peerId
 
 -- | Connect to a new peer.
-connectToPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> IO ()
-connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
+connectToPeer ::
+    Session -> TorrentSt -> HostAddress -> PortNumber -> IO ThreadId
+connectToPeer sess torst h p = forkIO $ catches go handlers
     where
-        go = bracket (socket AF_INET Stream 0) sClose $ \s-> do
+        -- We need to ensure that we either have our ThreadId in
+        -- sConnectionsInProgress or have our PeerSt in sPeers. Otherwise, we
+        -- could be left running when the peer manager kills all the peer
+        -- threads to stop the torrent.
+        go = do
+            (peerSt, sock) <- onException initialize $ do
+                tid <- myThreadId
+                atomically . modifyTVar (sConnectionsInProgress torst) $
+                    S.delete tid
+            finally (peerHandler sess torst peerSt sock) $ do
+                sClose sock
+                atomically $ modifyTVar (sPeers torst) (S.delete peerSt)
+            maybeLogPeer sess peerSt Debug "Disconnecting (normal)."
+        initialize :: IO (PeerSt, Socket)
+        initialize = bracketOnError (socket AF_INET Stream 0) sClose $ \s -> do
             reqQueue <- newTVarIO S.empty
             interested' <- newTVarIO False
             threadId <- myThreadId
@@ -75,7 +90,8 @@ connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             let connectionsInProgress = sConnectionsInProgress torst
             bracket_
                 (return ())
-                (atomically $ modifyTVar connectionsInProgress (subtract 1))
+                (atomically $
+                    modifyTVar connectionsInProgress (S.delete threadId))
                 (connect s $ SockAddrInet p h)
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
@@ -92,11 +108,10 @@ connectToPeer sess torst h p = (forkIO $ catches go handlers) >> return ()
             sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
             sendPeerMsg s Unchoke
             let peerSt' = peerSt {peerId = hPeerId theirHandshake}
-            bracket_
-                (atomically $ modifyTVar (sPeers torst) (S.insert peerSt'))
-                (atomically $ modifyTVar (sPeers torst) (S.delete peerSt'))
-                (peerHandler sess torst peerSt s)
-            maybeLogPeer sess peerSt Debug "Disconnecting (normal)."
+            atomically $ do
+                modifyTVar (sConnectionsInProgress torst) (S.delete threadId)
+                modifyTVar (sPeers torst) (S.insert peerSt')
+            return (peerSt', s)
         handlers = [
             Handler (\(e :: IOException) -> handleEx e),
             Handler (\(e :: ErrorCall) -> handleEx e),

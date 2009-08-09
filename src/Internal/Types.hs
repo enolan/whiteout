@@ -9,6 +9,7 @@ module Internal.Types
     PieceNum
     ) where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
 import Data.Array.IArray (Array)
@@ -40,7 +41,7 @@ data TorrentSt = TorrentSt {
     -- | Map from peerIds to peers.
     sPeers :: TVar (Set PeerSt),
     -- | How many connection attempts are in progress.
-    sConnectionsInProgress :: TVar Int,
+    sConnectionsInProgress :: TVar (Set ThreadId),
     sPotentialPeers :: TVar [(HostAddress, PortNumber)]
     }
 

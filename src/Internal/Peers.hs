@@ -80,20 +80,24 @@ peerManager sess torst = do
     whatNext <- atomically . foldr1 orElse $ alternatives
     case whatNext of
         ConnectToPeer h p -> do
-            connectToPeer sess torst h p
+            tid <- connectToPeer sess torst h p
+            atomically $ do
+                connectionsInProgress <- readTVar $ sConnectionsInProgress torst
+                writeTVar (sConnectionsInProgress torst)
+                    (S.insert tid connectionsInProgress)
             peerManager sess torst
         Exit -> do
-            -- We need to wait for pending connections to finish to avoid
-            -- a race; otherwise it would be possible for new peer
-            -- connections to be formed after we stop the torrent.
+            connectionsInProgress <- atomically $ readTVar $
+                sConnectionsInProgress torst
+            -- Foldable mapM_, not [] mapM_
+            mapM_ killThread connectionsInProgress
             atomically $ do
-                connectionsInProgress <-
-                    readTVar $ sConnectionsInProgress torst
-                if connectionsInProgress == 0
+                connectionsInProgress' <- readTVar
+                    (sConnectionsInProgress torst)
+                if S.size connectionsInProgress' == 0
                     then return ()
                     else retry
             peers <- atomically . readTVar $ sPeers torst
-            -- Foldable mapM_, not [] mapM_
             mapM_ (killThread . pThreadId) peers
             atomically $ do
                 peerSts <- readTVar $ sPeers torst
@@ -106,15 +110,13 @@ getNextPeer :: TorrentSt -> STM PeerManagerTask
 getNextPeer torst = do
     activePeers <- readTVar . sPeers $ torst
     connectionsInProgress <- readTVar . sConnectionsInProgress $ torst
-    if (S.size activePeers < 30) && (connectionsInProgress < 10)
+    if (S.size activePeers < 30) && (S.size connectionsInProgress < 10)
         then do
             potentialPeers <- readTVar . sPotentialPeers $ torst
             case potentialPeers of
                 [] -> retry
                 peer : peers -> do
                     writeTVar (sPotentialPeers torst) peers
-                    writeTVar (sConnectionsInProgress torst) $
-                        connectionsInProgress + 1
                     return $ uncurry ConnectToPeer peer
         else retry
 
