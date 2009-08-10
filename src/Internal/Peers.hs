@@ -106,6 +106,19 @@ peerManager sess torst = do
                     else retry
             atomically $ writeTVar (sActivity torst) Stopped
 
+-- Bad name. Blocks until we're asked to stop the torrent, then returns
+-- Exit. For use in above orElse.
+wereDone :: TorrentSt -> STM PeerManagerTask
+wereDone torst = do
+    activity <- readTVar . sActivity $ torst
+    case activity of
+        Running -> retry
+        Verifying -> error
+            "Invariant broken, verifying with peer manager running."
+        Stopped -> error
+            "Invariant broken, stopped with peer manager running."
+        Stopping -> return Exit
+
 getNextPeer :: TorrentSt -> STM PeerManagerTask
 getNextPeer torst = do
     activePeers <- readTVar . sPeers $ torst
@@ -119,16 +132,3 @@ getNextPeer torst = do
                     writeTVar (sPotentialPeers torst) peers
                     return $ uncurry ConnectToPeer peer
         else retry
-
--- Bad name. Blocks until we're asked to stop the torrent, then returns
--- Exit. For use in above orElse.
-wereDone :: TorrentSt -> STM PeerManagerTask
-wereDone torst = do
-    activity <- readTVar . sActivity $ torst
-    case activity of
-        Running -> retry
-        Verifying -> error
-            "Invariant broken, verifying with peer manager running."
-        Stopped -> error
-            "Invariant broken, stopped with peer manager running."
-        Stopping -> return Exit
