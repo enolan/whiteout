@@ -1,7 +1,6 @@
 module Internal.Peers
     (
     addPeer,
-    setPeerList,
     startTorrent,
     stopTorrent
     ) where
@@ -17,13 +16,10 @@ import qualified Data.Set as S
 import Network.Socket
 import System.IO.Unsafe
 
+import Internal.Announce
 import Internal.Logging
 import Internal.Peers.Handler
 import Internal.Types
-
--- | Set the list of potential peers for a torrent.
-setPeerList :: TorrentSt -> [(HostAddress, PortNumber)] -> STM ()
-setPeerList = writeTVar . sPotentialPeers
 
 -- | Add a single peer to the queue. Mostly for testing.
 addPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> STM ()
@@ -63,6 +59,7 @@ startTorrent sess torst = do
         else throwIO BadState
     atomically . maybeLog sess Medium . BC.concat $
         ["Starting torrent: \"", tName . sTorrent $ torst, "\""]
+    announceHelper sess torst (Just AStarted)
     forkIO $ peerManager sess torst
     return ()
 
@@ -73,10 +70,11 @@ startTorrent sess torst = do
 
 data PeerManagerTask = ConnectToPeer HostAddress PortNumber
                      | Exit
+                     | TimeToAnnounce
 
 peerManager :: Session -> TorrentSt -> IO ()
 peerManager sess torst = do
-    let alternatives = map ($ torst) [wereDone, getNextPeer]
+    let alternatives = map ($ torst) [wereDone, timeToAnnounce, getNextPeer]
     whatNext <- atomically . foldr1 orElse $ alternatives
     case whatNext of
         ConnectToPeer h p -> do
@@ -85,6 +83,9 @@ peerManager sess torst = do
                 connectionsInProgress <- readTVar $ sConnectionsInProgress torst
                 writeTVar (sConnectionsInProgress torst)
                     (S.insert tid connectionsInProgress)
+            peerManager sess torst
+        TimeToAnnounce -> do
+            announceHelper sess torst Nothing
             peerManager sess torst
         Exit -> do
             connectionsInProgress <- atomically $ readTVar $
@@ -99,12 +100,15 @@ peerManager sess torst = do
                     else retry
             peers <- atomically . readTVar $ sPeers torst
             mapM_ (killThread . pThreadId) peers
+            announceHelper sess torst $ Just AStopped
             atomically $ do
                 peerSts <- readTVar $ sPeers torst
                 if S.null peerSts
-                    then return ()
+                    then do
+                        tta <- newTVar False
+                        writeTVar (sTimeToAnnounce torst) tta
+                        writeTVar (sActivity torst) Stopped
                     else retry
-            atomically $ writeTVar (sActivity torst) Stopped
 
 -- Bad name. Blocks until we're asked to stop the torrent, then returns
 -- Exit. For use in above orElse.
@@ -119,6 +123,13 @@ wereDone torst = do
             "Invariant broken, stopped with peer manager running."
         Stopping -> return Exit
 
+timeToAnnounce :: TorrentSt -> STM PeerManagerTask
+timeToAnnounce torst = do
+    itsTime <- (readTVar $ sTimeToAnnounce torst) >>= readTVar
+    if itsTime
+        then return TimeToAnnounce
+        else retry
+
 getNextPeer :: TorrentSt -> STM PeerManagerTask
 getNextPeer torst = do
     activePeers <- readTVar . sPeers $ torst
@@ -132,3 +143,43 @@ getNextPeer torst = do
                     writeTVar (sPotentialPeers torst) peers
                     return $ uncurry ConnectToPeer peer
         else retry
+
+-- | Do an announce and do the right thing with the results.
+announceHelper :: Session -> TorrentSt -> Maybe AEvent -> IO ()
+announceHelper sess torst at = do
+    r <- try $ announce sess torst at
+    case r of
+        Left (e :: ErrorCall) -> do
+            tv <- genericRegisterDelay $ 120 * 1000000
+            -- Guess where I pulled 120 seconds from. Maybe we should do
+            -- exponential backoff...
+            atomically $ do
+                maybeLog sess Critical . BC.concat $
+                    ["Error in announce: \"", BC.pack $ show e, "\""]
+                writeTVar (sTimeToAnnounce torst) tv
+        Right (interval, peers) -> do
+            tv <- genericRegisterDelay $ interval * 1000000
+            atomically $ do
+                writeTVar (sTimeToAnnounce torst) tv
+                writeTVar (sPotentialPeers torst) peers
+                maybeLog sess Medium . BC.concat $
+                    ["Announced succesfully, announcing again in ",
+                    BC.pack $ show interval, " seconds."]
+
+-- | Generified version of registerDelay. Needed because on a 32-bit machine,
+-- the maximum wait of a normal registerDelay is only 35 minutes.
+genericRegisterDelay :: Integral a => a -> IO (TVar Bool)
+genericRegisterDelay microsecs = do
+    tv <- newTVarIO False
+    forkIO $ go tv microsecs
+    return tv
+    where
+    maxWait = maxBound :: Int
+    go tv microsecs' = do
+        if (fromIntegral maxWait) < microsecs'
+            then do
+                threadDelay maxWait
+                go tv $ microsecs' - (fromIntegral maxWait)
+            else do
+                threadDelay $ fromIntegral microsecs'
+                atomically $ writeTVar tv True

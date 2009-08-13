@@ -1,6 +1,6 @@
 module Internal.Announce
     (
-    AEvent,
+    AEvent(..),
     announce
     )
     where
@@ -18,7 +18,6 @@ import Network.URI
 
 import Internal.BEncode
 import Internal.Logging
-import Internal.Peers
 import Internal.Types
 
 -- | Kinds of events.
@@ -36,9 +35,10 @@ instance Show AEvent where
     show AStopped    = "stopped"
 
 -- | Announce to the tracker and add the resultant peers. Returns the tracker's
--- requested announce interval. May throw ErrorCalled exceptions.
+-- requested announce interval. May throw ErrorCall exceptions.
 announce ::
-    Session -> TorrentSt -> (Maybe AEvent) -> IO Integer
+    Session -> TorrentSt -> Maybe AEvent ->
+    IO (Integer, [(HostAddress, PortNumber)])
 announce sess torst at = do
     atomically . maybeLog sess Medium $ BC.concat
         ["Announcing torrent \"",
@@ -59,10 +59,7 @@ announce sess torst at = do
                         Left Nothing -> error "Error decoding announce response."
                         Left (Just err) -> error $
                             "Got error from tracker: " ++ BC.unpack err
-                        Right (AnnounceResp
-                            {interval = interval', peers = peers'}) -> do
-                            atomically $ setPeerList torst peers'
-                            return interval'
+                        Right ar -> return (interval ar, peers ar)
         Nothing -> error "couldn't parse URI in announce"
     where
     uri = BC.unpack (tAnnounce $ sTorrent torst) ++ "?" ++

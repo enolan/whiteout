@@ -42,7 +42,8 @@ data TorrentSt = TorrentSt {
     sPeers :: TVar (Set PeerSt),
     -- | How many connection attempts are in progress.
     sConnectionsInProgress :: TVar (Set ThreadId),
-    sPotentialPeers :: TVar [(HostAddress, PortNumber)]
+    sPotentialPeers :: TVar [(HostAddress, PortNumber)],
+    sTimeToAnnounce :: TVar (TVar Bool)
     }
 
 -- | The static information about a torrent, i.e. that stored in a file named

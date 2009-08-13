@@ -238,6 +238,7 @@ addTorrent sess tor path = case tFiles tor of
             peers <- newTVar S.empty
             connectionsInProgress <- newTVar S.empty
             potentialPeers <- newTVar []
+            timeToAnnounce <- newTVar False >>= newTVar
             let
                 torst = TorrentSt {
                     sTorrent = tor,
@@ -246,7 +247,8 @@ addTorrent sess tor path = case tFiles tor of
                     sActivity = activity,
                     sPeers = peers,
                     sConnectionsInProgress = connectionsInProgress,
-                    sPotentialPeers = potentialPeers}
+                    sPotentialPeers = potentialPeers,
+                    sTimeToAnnounce = timeToAnnounce}
                 torsts' = M.insert (tInfohash tor) torst torsts
             writeTVar (torrents sess) torsts'
             return torst
