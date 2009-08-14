@@ -150,7 +150,7 @@ announceHelper sess torst at = do
     r <- try $ announce sess torst at
     case r of
         Left (e :: ErrorCall) -> do
-            tv <- genericRegisterDelay $ 120 * 1000000
+            tv <- genericRegisterDelay $ (120 * 1000000 :: Integer)
             -- Guess where I pulled 120 seconds from. Maybe we should do
             -- exponential backoff...
             atomically $ do
