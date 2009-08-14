@@ -65,8 +65,8 @@ startTorrent sess torst = do
 
 -- This is the peer manager. There is a peer manager for each running
 -- torrent. It handles new peer connections and cleaning up when we stop a
--- torrent. Soon it will handle choking/unchoking, disconnecting
--- unproductive peers, and announcing.
+-- torrent. Soon it will handle choking/unchoking and disconnecting
+-- unproductive peers.
 
 data PeerManagerTask = ConnectToPeer HostAddress PortNumber
                      | Exit
