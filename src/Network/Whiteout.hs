@@ -46,9 +46,9 @@ import Data.Foldable (mapM_)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as S
-import Network.URI (parseURI)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
+import Network.URI (parseURI)
 import System.Directory
     (Permissions(..), doesDirectoryExist, doesFileExist, getPermissions)
 import System.FilePath ((</>), joinPath)
