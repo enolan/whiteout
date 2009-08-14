@@ -87,12 +87,7 @@ connectToPeer sess torst h p = forkIO $ catches go handlers
                     pThreadId = threadId
                     }
             maybeLogPeer sess peerSt Low "Connecting"
-            let connectionsInProgress = sConnectionsInProgress torst
-            bracket_
-                (return ())
-                (atomically $
-                    modifyTVar connectionsInProgress (S.delete threadId))
-                (connect s $ SockAddrInet p h)
+            connect s $ SockAddrInet p h
             sendHandshake sess torst s
             theirHandshake :: Handshake <- decode <$> recvAll s 68
             maybeLogPeer sess peerSt Debug $ B.concat
