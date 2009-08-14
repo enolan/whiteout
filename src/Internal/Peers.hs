@@ -163,7 +163,7 @@ announceHelper sess torst at = do
                 writeTVar (sTimeToAnnounce torst) tv
                 writeTVar (sPotentialPeers torst) peers
                 maybeLog sess Medium . BC.concat $
-                    ["Announced succesfully, announcing again in ",
+                    ["Announced succesfully, tracker requested interval of ",
                     BC.pack $ show interval, " seconds."]
 
 -- | Generified version of registerDelay. Needed because on a 32-bit machine,
