@@ -10,13 +10,14 @@ import Prelude hiding (mapM_)
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
+import Control.Monad hiding (mapM_)
 import qualified Data.ByteString.Char8 as BC
 import Data.Foldable (mapM_)
 import qualified Data.Set as S
 import Network.Socket
 import System.IO.Unsafe
 
-import Internal.Announce
+import qualified Internal.Announce as A
 import Internal.Logging
 import Internal.Peers.Handler
 import Internal.Types
@@ -59,61 +60,32 @@ startTorrent sess torst = do
         else throwIO BadState
     atomically . maybeLog sess Medium . BC.concat $
         ["Starting torrent: \"", tName . sTorrent $ torst, "\""]
-    announceHelper sess torst (Just AStarted)
+    announceHelper sess torst (Just A.AStarted)
     forkIO $ peerManager sess torst
     return ()
 
--- This is the peer manager. There is a peer manager for each running
--- torrent. It handles new peer connections and cleaning up when we stop a
--- torrent. Soon it will handle choking/unchoking and disconnecting
--- unproductive peers.
+-- This is the peer manager. There is one peer manager for each running
+-- torrent. The idiom in WaitThenDoStuff is waiting for some event/state with
+-- STM retry then doing some action and signalling whether to exit; e.g.
+-- waiting for the announce timer to go off and announcing or waiting for the
+-- Activity of the TorrentSt to be Stopping then killing all the connections.
+-- We combine a prioritized list of WaitThenDoStuff with orElse to do
+-- everything the peer manager needs to do.
 
-data PeerManagerTask = ConnectToPeer HostAddress PortNumber
-                     | Exit
-                     | TimeToAnnounce
+type WaitThenDoStuff = Session -> TorrentSt -> STM (IO Bool)
 
 peerManager :: Session -> TorrentSt -> IO ()
 peerManager sess torst = do
-    let alternatives = map ($ torst) [wereDone, timeToAnnounce, getNextPeer]
-    whatNext <- atomically . foldr1 orElse $ alternatives
-    case whatNext of
-        ConnectToPeer h p -> do
-            tid <- connectToPeer sess torst h p
-            atomically $ do
-                connectionsInProgress <- readTVar $ sConnectionsInProgress torst
-                writeTVar (sConnectionsInProgress torst)
-                    (S.insert tid connectionsInProgress)
-            peerManager sess torst
-        TimeToAnnounce -> do
-            announceHelper sess torst Nothing
-            peerManager sess torst
-        Exit -> do
-            connectionsInProgress <- atomically $ readTVar $
-                sConnectionsInProgress torst
-            -- Foldable mapM_, not [] mapM_
-            mapM_ killThread connectionsInProgress
-            atomically $ do
-                connectionsInProgress' <- readTVar
-                    (sConnectionsInProgress torst)
-                if S.size connectionsInProgress' == 0
-                    then return ()
-                    else retry
-            peers <- atomically . readTVar $ sPeers torst
-            mapM_ (killThread . pThreadId) peers
-            announceHelper sess torst $ Just AStopped
-            atomically $ do
-                peerSts <- readTVar $ sPeers torst
-                if S.null peerSts
-                    then do
-                        tta <- newTVar False
-                        writeTVar (sTimeToAnnounce torst) tta
-                        writeTVar (sActivity torst) Stopped
-                    else retry
+    let alternatives = map (flip ($ sess) torst)
+            [cleanup, announce, getNextPeer]
+    exit <- join . atomically . foldr1 orElse $ alternatives
+    if exit
+        then return ()
+        else peerManager sess torst
 
--- Bad name. Blocks until we're asked to stop the torrent, then returns
--- Exit. For use in above orElse.
-wereDone :: TorrentSt -> STM PeerManagerTask
-wereDone torst = do
+-- Check if stopTorrent has been called and if so clean up and exit.
+cleanup :: WaitThenDoStuff
+cleanup sess torst = do
     activity <- readTVar . sActivity $ torst
     case activity of
         Running -> retry
@@ -121,17 +93,46 @@ wereDone torst = do
             "Invariant broken, verifying with peer manager running."
         Stopped -> error
             "Invariant broken, stopped with peer manager running."
-        Stopping -> return Exit
+        Stopping -> return go
+    where
+    go = do
+        connectionsInProgress <- atomically $ readTVar $
+            sConnectionsInProgress torst
+        -- Foldable mapM_, not [] mapM_
+        mapM_ killThread connectionsInProgress
+        atomically $ do
+            connectionsInProgress' <- readTVar
+                (sConnectionsInProgress torst)
+            if S.size connectionsInProgress' == 0
+                then return ()
+                else retry
+        peers <- atomically . readTVar $ sPeers torst
+        mapM_ (killThread . pThreadId) peers
+        announceHelper sess torst $ Just A.AStopped
+        atomically $ do
+            peerSts <- readTVar $ sPeers torst
+            if S.null peerSts
+                then do
+                    tta <- newTVar False
+                    writeTVar (sTimeToAnnounce torst) tta
+                    writeTVar (sActivity torst) Stopped
+                else retry
+        return True
 
-timeToAnnounce :: TorrentSt -> STM PeerManagerTask
-timeToAnnounce torst = do
+-- If it's time to announce, announce.
+announce :: WaitThenDoStuff
+announce sess torst = do
     itsTime <- (readTVar $ sTimeToAnnounce torst) >>= readTVar
     if itsTime
-        then return TimeToAnnounce
+        then return go
         else retry
+    where
+    go = do
+        announceHelper sess torst Nothing
+        return False
 
-getNextPeer :: TorrentSt -> STM PeerManagerTask
-getNextPeer torst = do
+getNextPeer :: WaitThenDoStuff
+getNextPeer sess torst = do
     activePeers <- readTVar . sPeers $ torst
     connectionsInProgress <- readTVar . sConnectionsInProgress $ torst
     if (S.size activePeers < 30) && (S.size connectionsInProgress < 10)
@@ -141,13 +142,21 @@ getNextPeer torst = do
                 [] -> retry
                 peer : peers -> do
                     writeTVar (sPotentialPeers torst) peers
-                    return $ uncurry ConnectToPeer peer
+                    return $ go peer
         else retry
+    where
+    go (h, p) = do
+        tid <- connectToPeer sess torst h p
+        atomically $ do
+            connectionsInProgress <- readTVar $ sConnectionsInProgress torst
+            writeTVar (sConnectionsInProgress torst)
+                (S.insert tid connectionsInProgress)
+        return False
 
 -- | Do an announce and do the right thing with the results.
-announceHelper :: Session -> TorrentSt -> Maybe AEvent -> IO ()
+announceHelper :: Session -> TorrentSt -> Maybe A.AEvent -> IO ()
 announceHelper sess torst at = do
-    r <- try $ announce sess torst at
+    r <- try $ A.announce sess torst at
     case r of
         Left (e :: ErrorCall) -> do
             tv <- genericRegisterDelay $ (120 * 1000000 :: Integer)
