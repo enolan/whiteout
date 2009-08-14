@@ -36,7 +36,7 @@ import Control.Applicative
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Exception as C
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, when)
 import Data.Array.IArray ((!), bounds, listArray)
 import Data.Array.MArray (newArray, readArray, writeArray)
 import qualified Data.ByteString.Char8 as B
@@ -163,6 +163,8 @@ initialize name ourLogChan = do
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
+    when (B.length nameandver /= 6) $
+        error "Bad name identifier passed to initialize."
     randompart <- B.pack <$> replicateM 12 (randomRIO ('0','9'))
     return $ B.concat ["-", nameandver, "-", randompart]
 
