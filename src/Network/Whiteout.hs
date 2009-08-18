@@ -172,13 +172,19 @@ genPeerId nameandver = do
 -- Run this before exiting.
 close :: Session -> IO ()
 close sess = do
-    atomically $ readTVar (torrents sess) >>= mapM_ (stopTorrent sess)
+    atomically $ readTVar (torrents sess) >>= mapM_ maybeStopTorrent
     atomically $ do
         torrents' <- M.elems <$> readTVar (torrents sess)
         activities <- mapM (readTVar . sActivity) torrents'
         if all (== Stopped) $ activities
             then return ()
             else retry
+    where
+    maybeStopTorrent torst = do
+        act <- getActivity torst
+        if act == Running
+            then stopTorrent sess torst
+            else return ()
 
 -- | Get the currently active torrents, keyed by infohash. A torrent is active
 -- as long as it has been 'addTorrent'ed; one can be simultaneous active and

@@ -42,6 +42,7 @@ verifyGeneric torpath datapath expectedResult = do
             [0..maxPieceNum]
         )
     assertBool "Some pieces were not verified as expected" allExpected
+    close sess
 
 verifySingleFileShouldSucceed :: Assertion
 verifySingleFileShouldSucceed = verifyGeneric
