@@ -45,7 +45,6 @@ import Data.Digest.Pure.SHA (bytestringDigest, sha1)
 import Data.Foldable (mapM_)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
-import qualified Data.Set as S
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
 import Network.URI (parseURI)
@@ -243,8 +242,7 @@ addTorrent sess tor path = case tFiles tor of
             torsts <- readTVar $ torrents sess
             completion <- newArray (bounds $ tPieceHashes tor) False
             activity <- newTVar Stopped
-            peers <- newTVar S.empty
-            connectionsInProgress <- newTVar S.empty
+            peers <- newTVar M.empty
             potentialPeers <- newTVar []
             timeToAnnounce <- newTVar False >>= newTVar
             let
@@ -254,7 +252,6 @@ addTorrent sess tor path = case tFiles tor of
                     sCompletion = completion,
                     sActivity = activity,
                     sPeers = peers,
-                    sConnectionsInProgress = connectionsInProgress,
                     sPotentialPeers = potentialPeers,
                     sTimeToAnnounce = timeToAnnounce}
                 torsts' = M.insert (tInfohash tor) torst torsts

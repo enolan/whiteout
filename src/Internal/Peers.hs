@@ -7,13 +7,14 @@ module Internal.Peers
 
 import Prelude hiding (mapM_)
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad hiding (mapM_)
 import qualified Data.ByteString.Char8 as BC
 import Data.Foldable (mapM_)
-import qualified Data.Set as S
+import qualified Data.Map as M
 import Network.Socket
 import System.IO.Unsafe
 
@@ -96,27 +97,14 @@ cleanup sess torst = do
         Stopping -> return go
     where
     go = do
-        connectionsInProgress <- atomically $ readTVar $
-            sConnectionsInProgress torst
-        -- Foldable mapM_, not [] mapM_
-        mapM_ killThread connectionsInProgress
+        peerThreadIds <- M.keys <$> (atomically $ readTVar $ sPeers torst)
+        mapM_ killThread peerThreadIds
         atomically $ do
-            connectionsInProgress' <- readTVar
-                (sConnectionsInProgress torst)
-            if S.size connectionsInProgress' == 0
+            allPeerThreadsAreDead <- M.null <$> readTVar (sPeers torst)
+            if allPeerThreadsAreDead
                 then return ()
                 else retry
-        peers <- atomically . readTVar $ sPeers torst
-        mapM_ (killThread . pThreadId) peers
         announceHelper sess torst $ Just A.AStopped
-        atomically $ do
-            peerSts <- readTVar $ sPeers torst
-            if S.null peerSts
-                then do
-                    tta <- newTVar False
-                    writeTVar (sTimeToAnnounce torst) tta
-                    writeTVar (sActivity torst) Stopped
-                else retry
         return True
 
 -- If it's time to announce, announce.
@@ -133,9 +121,8 @@ announce sess torst = do
 
 getNextPeer :: WaitThenDoStuff
 getNextPeer sess torst = do
-    activePeers <- readTVar . sPeers $ torst
-    connectionsInProgress <- readTVar . sConnectionsInProgress $ torst
-    if (S.size activePeers < 30) && (S.size connectionsInProgress < 10)
+    peerConnections <- M.size <$> readTVar (sPeers torst)
+    if peerConnections < 30
         then do
             potentialPeers <- readTVar . sPotentialPeers $ torst
             case potentialPeers of
@@ -148,9 +135,9 @@ getNextPeer sess torst = do
     go (h, p) = do
         tid <- connectToPeer sess torst h p
         atomically $ do
-            connectionsInProgress <- readTVar $ sConnectionsInProgress torst
-            writeTVar (sConnectionsInProgress torst)
-                (S.insert tid connectionsInProgress)
+            peers <- readTVar $ sPeers torst
+            writeTVar (sPeers torst)
+                (M.insert tid (PeerSt Nothing) peers)
         return False
 
 -- | Do an announce and do the right thing with the results.

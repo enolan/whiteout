@@ -14,12 +14,12 @@ import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
-import Data.Function (on)
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
 import Data.Iteratee.Binary
 import Data.Iteratee.WrappedByteString
 import Data.Maybe (fromJust)
+import qualified Data.Map as M
 import qualified Data.Set as S
 import Network.Socket hiding (Debug) -- clashes with the LogLevel
 import qualified Network.Socket.ByteString as SB
@@ -32,29 +32,22 @@ import Internal.Peers.Handler.Messages
 import Internal.Pieces
 import Internal.Types
 
+newtype PeerSt = PeerSt {unPeerSt :: Maybe ConnectedPeerSt}
+-- Nothing when we're not fully connected yet.
+
 -- | The state associated with a peer connection. Used for communication
--- between the reader thread, the writer thread and, when it's actually written,
--- the peer manager.
-data PeerSt = PeerSt {
+-- between the reader thread, the writer thread and the peer manager.
+data ConnectedPeerSt = ConnectedPeerSt {
     pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
     -- ^ Pieces in the pipeline, to be sent.
     pName :: B.ByteString,
     -- ^ Human-readable name for the peer e.g. "127.0.0.1:23000"
     peerId :: B.ByteString,
-    interested :: TVar Bool,
-    pThreadId :: ThreadId
-    -- ^ So the peer manager can kill the thread, thus closing the peer
-    -- connection.
+    interested :: TVar Bool
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one, and a bitfield, and track choke/interest state here.
     }
-
-instance Eq PeerSt where
-    (==) = (==) `on` peerId
-
-instance Ord PeerSt where
-    compare = compare `on` peerId
 
 -- | Connect to a new peer.
 connectToPeer ::
@@ -65,48 +58,45 @@ connectToPeer sess torst h p = forkIO $ catches go handlers
         -- sConnectionsInProgress or have our PeerSt in sPeers. Otherwise, we
         -- could be left running when the peer manager kills all the peer
         -- threads to stop the torrent.
-        go = do
-            (peerSt, sock) <- onException initialize $ do
+        go = bracket
+            (socket AF_INET Stream 0)
+            (\s -> do
+                sClose s
                 tid <- myThreadId
-                atomically . modifyTVar (sConnectionsInProgress torst) $
-                    S.delete tid
-            finally (peerHandler sess torst peerSt sock) $ do
-                sClose sock
-                atomically $ modifyTVar (sPeers torst) (S.delete peerSt)
-            maybeLogPeer sess peerSt Debug "Disconnecting (normal)."
-        initialize :: IO (PeerSt, Socket)
-        initialize = bracketOnError (socket AF_INET Stream 0) sClose $ \s -> do
-            reqQueue <- newTVarIO S.empty
-            interested' <- newTVarIO False
-            threadId <- myThreadId
-            let peerSt = PeerSt {
-                    pieceReqs = reqQueue,
-                    pName = peerName,
-                    peerId = undefined, -- Ugh.
-                    interested = interested',
-                    pThreadId = threadId
-                    }
-            maybeLogPeer sess peerSt Low "Connecting"
-            connect s $ SockAddrInet p h
-            sendHandshake sess torst s
-            theirHandshake :: Handshake <- decode <$> recvAll s 68
-            maybeLogPeer sess peerSt Debug $ B.concat
-                ["Got handshake: ", (BC.pack $ show theirHandshake)]
-            if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
-                then error "Wrong infohash in outgoing peer connection!"
-                else return ()
-            let
-                numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
-                (quot', rem') = quotRem numPieces 8
-                bitFieldLen =
-                    fromIntegral $ if rem' /= 0 then quot'+1 else quot'
-            sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
-            sendPeerMsg s Unchoke
-            let peerSt' = peerSt {peerId = hPeerId theirHandshake}
-            atomically $ do
-                modifyTVar (sConnectionsInProgress torst) (S.delete threadId)
-                modifyTVar (sPeers torst) (S.insert peerSt')
-            return (peerSt', s)
+                atomically $ modifyTVar (sPeers torst) (M.delete tid))
+            (\s -> do
+                reqQueue <- newTVarIO S.empty
+                interested' <- newTVarIO False
+                let cPeerSt = ConnectedPeerSt {
+                        pieceReqs = reqQueue,
+                        pName = peerName,
+                        peerId = undefined, -- Ugh.
+                        interested = interested'
+                        }
+                maybeLogPeer sess cPeerSt Low "Connecting"
+                connect s $ SockAddrInet p h
+                sendHandshake sess torst s
+                theirHandshake :: Handshake <- decode <$> recvAll s 68
+                maybeLogPeer sess cPeerSt Debug $ B.concat
+                    ["Got handshake: ", (BC.pack $ show theirHandshake)]
+                if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
+                    then error "Wrong infohash in outgoing peer connection!"
+                    else return ()
+                let
+                    numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
+                    (quot', rem') = quotRem numPieces 8
+                    bitFieldLen =
+                        fromIntegral $ if rem' /= 0 then quot'+1 else quot'
+                sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
+                sendPeerMsg s Unchoke
+                let
+                    cPeerSt' = cPeerSt {peerId = hPeerId theirHandshake}
+                    peerSt = PeerSt $ Just cPeerSt'
+                tid <- myThreadId
+                atomically $ modifyTVar (sPeers torst) (M.insert tid peerSt)
+                -- Overwrites the Nothing inserted by getNextPeer
+                peerHandler sess torst cPeerSt' s
+                maybeLogPeer sess cPeerSt' Debug "Disconnecting (normal).")
         handlers = [
             Handler (\(e :: IOException) -> handleEx e),
             Handler (\(e :: ErrorCall) -> handleEx e),
@@ -124,7 +114,7 @@ connectToPeer sess torst h p = forkIO $ catches go handlers
 modifyTVar :: TVar a -> (a -> a) -> STM ()
 modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
-peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
+peerHandler :: Session -> TorrentSt -> ConnectedPeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket
         (forkIO $ peerWriter torst peerSt s)
         killThread
@@ -135,7 +125,7 @@ peerHandler sess torst peerSt s = bracket
                 handler sess peerSt
             run iter
 
-handler :: Session -> PeerSt -> PeerMsg -> IO Bool
+handler :: Session -> ConnectedPeerSt -> PeerMsg -> IO Bool
 handler sess peerSt it = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
@@ -149,8 +139,8 @@ handler sess peerSt it = do
         _ -> return ()
     return True
 
-peerWriter :: TorrentSt -> PeerSt -> Socket -> IO ()
-peerWriter torst (PeerSt {pieceReqs = pieceReqs'}) s = loop
+peerWriter :: TorrentSt -> ConnectedPeerSt -> Socket -> IO ()
+peerWriter torst (ConnectedPeerSt {pieceReqs = pieceReqs'}) s = loop
     where
     loop = do
         (pn, offset, len) <- atomically $ do
@@ -236,6 +226,6 @@ recvAll s numBytes = do
           | count == numBytes -> return whatWeGot
           | otherwise -> error "recvAll: the impossible happened"
 
-maybeLogPeer :: Session -> PeerSt -> LogLevel -> B.ByteString -> IO ()
+maybeLogPeer :: Session -> ConnectedPeerSt -> LogLevel -> B.ByteString -> IO ()
 maybeLogPeer sess peerSt lvl msg =
     atomically $ maybeLog sess lvl $ B.concat ["(", pName peerSt, ") ", msg]

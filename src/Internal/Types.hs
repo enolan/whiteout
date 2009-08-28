@@ -15,7 +15,7 @@ import Control.Exception
 import Data.Array.IArray (Array)
 import Data.ByteString (ByteString)
 import qualified Data.Map as M
-import Data.Set (Set)
+import Data.Map (Map)
 import Data.Typeable
 import Data.Word (Word32)
 import Network.Socket (HostAddress, PortNumber)
@@ -38,10 +38,9 @@ data TorrentSt = TorrentSt {
     -- whether a piece's hash has been checked and found correct.
     sCompletion :: TArray PieceNum Bool,
     sActivity :: TVar Activity,
-    -- | Map from peerIds to peers.
-    sPeers :: TVar (Set PeerSt),
+    -- | Map from threadIds to peers.
+    sPeers :: TVar (Map ThreadId PeerSt),
     -- | How many connection attempts are in progress.
-    sConnectionsInProgress :: TVar (Set ThreadId),
     sPotentialPeers :: TVar [(HostAddress, PortNumber)],
     sTimeToAnnounce :: TVar (TVar Bool)
     }
