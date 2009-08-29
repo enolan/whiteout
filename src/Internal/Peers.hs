@@ -140,27 +140,35 @@ getNextPeer sess torst = do
                 (M.insert tid (PeerSt Nothing) peers)
         return False
 
--- | Do an announce and do the right thing with the results.
+-- | Do an announce and do the right thing with the results. Asynchronous.
 announceHelper :: Session -> TorrentSt -> Maybe A.AEvent -> IO ()
 announceHelper sess torst at = do
-    r <- try $ A.announce sess torst at
-    case r of
-        Left (e :: ErrorCall) -> do
-            tv <- genericRegisterDelay $ (120 * 1000000 :: Integer)
-            -- Guess where I pulled 120 seconds from. Maybe we should do
-            -- exponential backoff...
-            atomically $ do
-                maybeLog sess Critical . BC.concat $
-                    ["Error in announce: \"", BC.pack $ show e, "\""]
-                writeTVar (sTimeToAnnounce torst) tv
-        Right (interval, peers) -> do
-            tv <- genericRegisterDelay $ interval * 1000000
-            atomically $ do
-                writeTVar (sTimeToAnnounce torst) tv
-                writeTVar (sPotentialPeers torst) peers
-                maybeLog sess Medium . BC.concat $
-                    ["Announced succesfully, tracker requested interval of ",
-                    BC.pack $ show interval, " seconds."]
+    -- Make sure announceHelper isn't called again while we're waiting for the
+    -- tracker.
+    atomically
+        (newTVar False >>= writeTVar (sTimeToAnnounce torst))
+    forkIO $ catches go handlers
+    return ()
+    where
+    go = do
+        (interval, peers) <- A.announce sess torst at
+        tv <- genericRegisterDelay $ interval * 1000000
+        atomically $ do
+            writeTVar (sTimeToAnnounce torst) tv
+            writeTVar (sPotentialPeers torst) peers
+            maybeLog sess Medium . BC.concat $
+                ["Announced successfully, tracker requested interval of ",
+                BC.pack $ show interval, " seconds."]
+    handlers = [Handler $ \(e :: ErrorCall) -> handleEx e,
+                Handler $ \(e :: IOException) -> handleEx e]
+    handleEx e = do
+        tv <- genericRegisterDelay $ (120 * 1000000 :: Integer)
+        -- Guess where I pulled 120 seconds from. Maybe we should do
+        -- exponential backoff...
+        atomically $ do
+            maybeLog sess Critical . BC.concat $
+                ["Error in announce : \"", BC.pack $ show e, "\""]
+            writeTVar (sTimeToAnnounce torst) tv
 
 -- | Generified version of registerDelay. Needed because on a 32-bit machine,
 -- the maximum wait of a normal registerDelay is only 35 minutes.
