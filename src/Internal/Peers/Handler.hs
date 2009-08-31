@@ -24,7 +24,6 @@ import qualified Data.Set as S
 import Network.Socket hiding (Debug) -- clashes with the LogLevel
 import qualified Network.Socket.ByteString as SB
 import qualified Network.Socket.ByteString.Lazy as SBL
-import System.IO.Unsafe (unsafePerformIO)
 import qualified Text.Show.ByteString as SBS
 
 import Internal.Logging (maybeLog)
@@ -32,16 +31,20 @@ import Internal.Peers.Handler.Messages
 import Internal.Pieces
 import Internal.Types
 
-newtype PeerSt = PeerSt {unPeerSt :: Maybe ConnectedPeerSt}
--- Nothing when we're not fully connected yet.
+data PeerSt = PeerSt {
+    connectedPeerSt :: Maybe ConnectedPeerSt, -- ^ Nothing before handshaking
+    pSockAddr :: SockAddr -- ^ The address and port of the peer in question.
+    }
 
--- | The state associated with a peer connection. Used for communication
--- between the reader thread, the writer thread and the peer manager.
+fromConnectedPeerSt :: PeerSt -> ConnectedPeerSt
+fromConnectedPeerSt = fromJust . connectedPeerSt
+
+-- | The state associated with a fully-handshaked peer connection. Used for
+-- communication between the reader thread, the writer thread and the peer
+-- manager.
 data ConnectedPeerSt = ConnectedPeerSt {
     pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
     -- ^ Pieces in the pipeline, to be sent.
-    pName :: B.ByteString,
-    -- ^ Human-readable name for the peer e.g. "127.0.0.1:23000"
     peerId :: B.ByteString,
     interested :: TVar Bool
 
@@ -51,8 +54,8 @@ data ConnectedPeerSt = ConnectedPeerSt {
 
 -- | Connect to a new peer.
 connectToPeer ::
-    Session -> TorrentSt -> HostAddress -> PortNumber -> IO ThreadId
-connectToPeer sess torst h p = forkIO $ catches go handlers
+    Session -> TorrentSt -> PeerSt -> IO ThreadId
+connectToPeer sess torst peerSt = forkIO $ catches go handlers
     where
         -- We need to ensure that we either have our ThreadId in
         -- sConnectionsInProgress or have our PeerSt in sPeers. Otherwise, we
@@ -65,19 +68,11 @@ connectToPeer sess torst h p = forkIO $ catches go handlers
                 tid <- myThreadId
                 atomically $ modifyTVar (sPeers torst) (M.delete tid))
             (\s -> do
-                reqQueue <- newTVarIO S.empty
-                interested' <- newTVarIO False
-                let cPeerSt = ConnectedPeerSt {
-                        pieceReqs = reqQueue,
-                        pName = peerName,
-                        peerId = undefined, -- Ugh.
-                        interested = interested'
-                        }
-                maybeLogPeer sess cPeerSt Low "Connecting"
-                connect s $ SockAddrInet p h
+                maybeLogPeer sess peerSt Low "Connecting"
+                connect s $ pSockAddr peerSt
                 sendHandshake sess torst s
                 theirHandshake :: Handshake <- decode <$> recvAll s 68
-                maybeLogPeer sess cPeerSt Debug $ B.concat
+                maybeLogPeer sess peerSt Debug $ B.concat
                     ["Got handshake: ", (BC.pack $ show theirHandshake)]
                 if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
                     then error "Wrong infohash in outgoing peer connection!"
@@ -89,14 +84,21 @@ connectToPeer sess torst h p = forkIO $ catches go handlers
                         fromIntegral $ if rem' /= 0 then quot'+1 else quot'
                 sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
                 sendPeerMsg s Unchoke
+                reqQueue <- newTVarIO S.empty
+                interested' <- newTVarIO False
                 let
-                    cPeerSt' = cPeerSt {peerId = hPeerId theirHandshake}
-                    peerSt = PeerSt $ Just cPeerSt'
+                    cPeerSt = ConnectedPeerSt {
+                        pieceReqs = reqQueue,
+                        peerId = hPeerId theirHandshake,
+                        interested = interested'}
+                    peerSt' = PeerSt {
+                        connectedPeerSt = Just cPeerSt,
+                        pSockAddr = pSockAddr peerSt}
                 tid <- myThreadId
-                atomically $ modifyTVar (sPeers torst) (M.insert tid peerSt)
-                -- Overwrites the Nothing inserted by getNextPeer
-                peerHandler sess torst cPeerSt' s
-                maybeLogPeer sess cPeerSt' Debug "Disconnecting (normal).")
+                atomically $ modifyTVar (sPeers torst) (M.insert tid peerSt')
+                -- Overwrites the unconnected PeerSt inserted by getNextPeer.
+                peerHandler sess torst peerSt' s
+                maybeLogPeer sess peerSt' Debug "Disconnecting (normal).")
         handlers = [
             Handler (\(e :: IOException) -> handleEx e),
             Handler (\(e :: ErrorCall) -> handleEx e),
@@ -105,18 +107,16 @@ connectToPeer sess torst h p = forkIO $ catches go handlers
         handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
         handleEx :: Show e => e -> IO ()
         handleEx e = atomically $ maybeLog sess Medium $ B.concat
-            ["Caught exception in peer handler. ", peerName, ": ",
-             BC.pack $ show e]
-        peerName = B.concat
-            [BC.pack (unsafePerformIO . inet_ntoa $ h), ":",
-             BC.pack $ show (fromIntegral p :: Int)]
+            ["Caught exception in peer handler. ",
+             BC.pack . show . pSockAddr $ peerSt,
+             ": ", BC.pack $ show e]
 
 modifyTVar :: TVar a -> (a -> a) -> STM ()
 modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
-peerHandler :: Session -> TorrentSt -> ConnectedPeerSt -> Socket -> IO ()
+peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket
-        (forkIO $ peerWriter torst peerSt s)
+        (forkIO $ peerWriter torst (fromConnectedPeerSt peerSt) s)
         killThread
         (const peerReader)
     where
@@ -125,17 +125,21 @@ peerHandler sess torst peerSt s = bracket
                 handler sess peerSt
             run iter
 
-handler :: Session -> ConnectedPeerSt -> PeerMsg -> IO Bool
+handler :: Session -> PeerSt -> PeerMsg -> IO Bool
 handler sess peerSt it = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
     case it of
         Request pn off len -> atomically $
-            modifyTVar (pieceReqs peerSt) $ S.insert (pn, off, len)
+            modifyTVar (pieceReqs . fromConnectedPeerSt $ peerSt) $
+                S.insert (pn, off, len)
         Cancel pn off len -> atomically $
-            modifyTVar (pieceReqs peerSt) $ S.delete (pn, off, len)
-        Interested -> atomically $ writeTVar (interested peerSt) True
-        NotInterested -> atomically $ writeTVar (interested peerSt) False
+            modifyTVar (pieceReqs . fromConnectedPeerSt $ peerSt) $
+                S.delete (pn, off, len)
+        Interested -> atomically $
+            writeTVar (interested . fromConnectedPeerSt $ peerSt) True
+        NotInterested -> atomically $
+            writeTVar (interested . fromConnectedPeerSt $ peerSt) False
         _ -> return ()
     return True
 
@@ -226,6 +230,7 @@ recvAll s numBytes = do
           | count == numBytes -> return whatWeGot
           | otherwise -> error "recvAll: the impossible happened"
 
-maybeLogPeer :: Session -> ConnectedPeerSt -> LogLevel -> B.ByteString -> IO ()
+maybeLogPeer :: Session -> PeerSt -> LogLevel -> B.ByteString -> IO ()
 maybeLogPeer sess peerSt lvl msg =
-    atomically $ maybeLog sess lvl $ B.concat ["(", pName peerSt, ") ", msg]
+    atomically $ maybeLog sess lvl $ B.concat
+        ["(", BC.pack . show $ pSockAddr peerSt, ") ", msg]

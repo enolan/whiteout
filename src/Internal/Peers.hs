@@ -133,11 +133,15 @@ getNextPeer sess torst = do
         else retry
     where
     go (h, p) = do
-        tid <- connectToPeer sess torst h p
+        let
+            peerSt = PeerSt {
+                connectedPeerSt = Nothing,
+                pSockAddr = SockAddrInet p h}
+        tid <- connectToPeer sess torst peerSt
         atomically $ do
             peers <- readTVar $ sPeers torst
             writeTVar (sPeers torst)
-                (M.insert tid (PeerSt Nothing) peers)
+                (M.insert tid peerSt peers)
         return False
 
 -- | Do an announce and do the right thing with the results. Asynchronous.
