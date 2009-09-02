@@ -71,8 +71,8 @@ mkAnnounceQString sess torst at = urlEncodeVars vars
     vars = [
         ("info_hash", BC.unpack $ tInfohash $ sTorrent torst),
         ("peer_id", BC.unpack $ sPeerId sess),
-        -- FIXME port, uploaded
-        ("port", "55555"),
+        ("port", show $ listenPort sess),
+        -- FIXME uploaded
         ("uploaded", "0"),
         ("downloaded", "0"),
         ("left", "0"),

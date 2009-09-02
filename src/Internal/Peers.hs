@@ -1,6 +1,7 @@
 module Internal.Peers
     (
     addPeer,
+    peerListener,
     startTorrent,
     stopTorrent
     ) where

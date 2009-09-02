@@ -1,13 +1,15 @@
 module Internal.Peers.Handler
     (
     PeerSt(..),
-    connectToPeer
+    connectToPeer,
+    peerListener
     ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
+import Control.Monad
 import Data.Array.IArray (bounds)
 import Data.Binary
 import Data.Binary.Put
@@ -19,8 +21,8 @@ import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
 import Data.Iteratee.Binary
 import Data.Iteratee.WrappedByteString
-import Data.Maybe (fromJust)
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
 import qualified Data.Set as S
 import Network.Socket hiding (Debug) -- clashes with the LogLevel
 import qualified Network.Socket.ByteString as SB
@@ -131,6 +133,70 @@ connectToPeer sess torst sockAddr =
              BC.pack . show $ sockAddr,
              ": ", BC.pack $ show e]
 
+peerListener :: Session -> PortNumber -> IO ()
+peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
+    bindSocket ls $ SockAddrInet p iNADDR_ANY
+    listen ls 10
+    forever $ accept ls >>= (forkIO . go)
+    where
+    go (s, sockaddr@(SockAddrInet _ _)) =
+        let
+            pName = BC.pack $ show sockaddr
+            handlers = [
+                Handler (\(e :: IOException) -> handleEx e),
+                Handler (\(e :: ErrorCall) -> handleEx e),
+                Handler (\(e :: AsyncException) -> handleAsync e)
+                ]
+            handleEx e = atomically $ maybeLog sess Medium $ B.concat
+                ["Caught exception in peer handler. ", pName, ": ",
+                 BC.pack $ show e]
+            handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
+            in flip catches handlers $ do
+        atomically . maybeLog sess Debug $ BC.concat [
+            "New incoming connection: ", pName]
+        reqQueue <- newTVarIO S.empty
+        interested' <- newTVarIO False
+        theirHandshake :: Handshake <- decode <$> recvAll s 68
+        -- Make sure exceptions related to decoding the handshake are thrown
+        -- here rather than in logToFile &c.
+        evaluate theirHandshake
+        let
+            peerSt = PeerSt
+                {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
+            cPeerSt = ConnectedPeerSt {
+                pieceReqs = reqQueue,
+                peerId = hPeerId theirHandshake,
+                interested = interested' }
+        maybeLogPeer sess peerSt Debug $ B.concat
+            ["Got handshake: ", (BC.pack $ show theirHandshake)]
+        tid <- myThreadId
+        mbtorst <- atomically $ do
+            mbtorst' <- M.lookup (hInfoHash theirHandshake) <$>
+                (readTVar $ torrents sess)
+            case mbtorst' of
+                Nothing -> return mbtorst'
+                Just torst -> do
+                    ok <- (==Running) <$> readTVar (sActivity torst)
+                    peercount <- M.size <$> readTVar (sPeers torst)
+                    --FIXME need to check if we're already connected to this
+                    --peer in another thread.
+                    if ok && peercount <= 50
+                        then do
+                            modifyTVar (sPeers torst) (M.insert tid peerSt)
+                            return mbtorst'
+                        else return Nothing
+        case mbtorst of
+            Nothing -> error "Refusing connection."
+            Just torst -> flip finally
+                (atomically $ modifyTVar (sPeers torst) (M.delete tid)) $ do
+                    maybeLogPeer sess peerSt Low "Connected."
+                    sendHandshake sess torst s
+                    sendFullBitfield torst s
+                    sendPeerMsg s Unchoke
+                    peerHandler sess torst peerSt s
+    go (_, _) =
+        error "Got non-IPv4 SockAddr in peerListener"
+
 modifyTVar :: TVar a -> (a -> a) -> STM ()
 modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
@@ -230,6 +296,15 @@ sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
     hResByte5 = 0, hResByte6 = 0, hResByte7 = 0,
     hInfoHash = tInfohash $ sTorrent torst,
     hPeerId = sPeerId sess}
+
+-- | Send an all \255 bitfield of appropriate length.
+sendFullBitfield :: TorrentSt -> Socket -> IO ()
+sendFullBitfield torst s = let
+    numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
+    (quot', rem') = quotRem numPieces 8
+    bitFieldLen =
+        fromIntegral $ if rem' /= 0 then quot'+1 else quot' in
+    sendPeerMsg s . Bitfield $ B.replicate bitFieldLen 255
 
 sendPeerMsg :: Socket -> PeerMsg -> IO ()
 sendPeerMsg s p = SBL.sendAll s $ runPut $ do

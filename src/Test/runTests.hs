@@ -44,7 +44,7 @@ singleseed :: String -> String -> IO ()
 singleseed host port = do
     logChan <- newTChanIO
     logToConsole logChan
-    sess <- initialize Nothing $ Just logChan
+    sess <- initialize Nothing (Just logChan) 31337
     tor <- loadTorrentFromFile
         "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
     torst <- addTorrent sess tor

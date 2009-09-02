@@ -33,7 +33,7 @@ module Network.Whiteout
 import Prelude hiding (mapM_)
 
 import Control.Applicative
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.STM
 import Control.Exception as C
 import Control.Monad (replicateM, when)
@@ -47,6 +47,7 @@ import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 import Network.HTTP
     (Response(..), RequestMethod(..), mkRequest, simpleHTTP)
+import Network.Socket (PortNumber)
 import Network.URI (parseURI)
 import System.Directory
     (Permissions(..), doesDirectoryExist, doesFileExist, getPermissions)
@@ -151,14 +152,19 @@ initialize :: Maybe (B.ByteString)
     -- directory. If you pass 'Nothing', we'll use WO and the whiteout version.
     -> Maybe (TChan (LogLevel, B.ByteString))
     -- ^ Logging channel.
+    -> PortNumber
+    -- ^ Listen port.
     -> IO Session
-initialize name ourLogChan = do
+initialize name ourLogChan portNum = do
     -- Could use cabal to get our version number here...
-    peerId <- genPeerId $ fromMaybe "WO0000" name 
-    atomically $ do
+    peerId <- genPeerId $ fromMaybe "WO0000" name
+    sess <- atomically $ do
         torrents' <- newTVar M.empty
         return Session
-            { torrents = torrents', sPeerId = peerId, logChan = ourLogChan }
+            {torrents = torrents', sPeerId = peerId, logChan = ourLogChan,
+             listenPort = portNum, listenerThreadId = undefined}
+    tid <- forkIO $ peerListener sess portNum
+    return $ sess {listenerThreadId = tid}
 
 genPeerId :: B.ByteString -> IO B.ByteString
 genPeerId nameandver = do
@@ -168,9 +174,11 @@ genPeerId nameandver = do
     return $ B.concat ["-", nameandver, "-", randompart]
 
 -- | Clean up after ourselves, closing file handles, ending connections, etc.
--- Run this before exiting.
+-- Run this before exiting. Note that using a session after calling close is
+-- undefined.
 close :: Session -> IO ()
 close sess = do
+    killThread $ listenerThreadId sess
     atomically $ readTVar (torrents sess) >>= mapM_ maybeStopTorrent
     atomically $ do
         torrents' <- M.elems <$> readTVar (torrents sess)
