@@ -14,6 +14,7 @@ import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as L
+import qualified Data.Foldable as F
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
 import Data.Iteratee.Binary
@@ -54,20 +55,39 @@ data ConnectedPeerSt = ConnectedPeerSt {
 
 -- | Connect to a new peer.
 connectToPeer ::
-    Session -> TorrentSt -> PeerSt -> IO ThreadId
-connectToPeer sess torst peerSt = forkIO $ catches go handlers
+    Session -> TorrentSt -> SockAddr -> IO ()
+connectToPeer sess torst sockAddr =
+    (block . forkIO $ catches go handlers) >> return ()
     where
-        -- We need to ensure that we either have our ThreadId in
-        -- sConnectionsInProgress or have our PeerSt in sPeers. Otherwise, we
-        -- could be left running when the peer manager kills all the peer
-        -- threads to stop the torrent.
         go = bracket
-            (socket AF_INET Stream 0)
-            (\s -> do
+            (do
+                s <- socket AF_INET Stream 0
+                tid <- myThreadId
+                atomically $ do
+                    activity <- readTVar . sActivity $ torst
+                    case activity of
+                        Running -> return ()
+                        _ -> error
+                            "Torrent stopped, new connection dying."
+                    wereAlreadyConnected <-
+                        F.any ((==sockAddr) . pSockAddr) <$>
+                            (readTVar . sPeers $ torst)
+                    if wereAlreadyConnected
+                        then error
+                            "Already connected to this peer in a different \
+                            \thread."
+                        else return ()
+                    let
+                        peerSt = PeerSt
+                            {connectedPeerSt = Nothing, pSockAddr = sockAddr}
+                    modifyTVar (sPeers torst) (M.insert tid peerSt)
+                    return (s, peerSt)
+                    )
+            (\(s, _) -> do
                 sClose s
                 tid <- myThreadId
                 atomically $ modifyTVar (sPeers torst) (M.delete tid))
-            (\s -> do
+            (\(s, peerSt) -> do
                 maybeLogPeer sess peerSt Low "Connecting"
                 connect s $ pSockAddr peerSt
                 sendHandshake sess torst s
@@ -108,7 +128,7 @@ connectToPeer sess torst peerSt = forkIO $ catches go handlers
         handleEx :: Show e => e -> IO ()
         handleEx e = atomically $ maybeLog sess Medium $ B.concat
             ["Caught exception in peer handler. ",
-             BC.pack . show . pSockAddr $ peerSt,
+             BC.pack . show $ sockAddr,
              ": ", BC.pack $ show e]
 
 modifyTVar :: TVar a -> (a -> a) -> STM ()
