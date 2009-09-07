@@ -23,16 +23,16 @@ import Data.Word (Word8, Word32)
 import Internal.Types
 
 data Handshake = Handshake {
-    hResByte0 :: Word8,
-    hResByte1 :: Word8,
-    hResByte2 :: Word8,
-    hResByte3 :: Word8,
-    hResByte4 :: Word8,
-    hResByte5 :: Word8,
-    hResByte6 :: Word8,
-    hResByte7 :: Word8,
-    hInfoHash :: B.ByteString,
-    hPeerId :: B.ByteString
+    hResByte0 :: !Word8,
+    hResByte1 :: !Word8,
+    hResByte2 :: !Word8,
+    hResByte3 :: !Word8,
+    hResByte4 :: !Word8,
+    hResByte5 :: !Word8,
+    hResByte6 :: !Word8,
+    hResByte7 :: !Word8,
+    hInfoHash :: !B.ByteString,
+    hPeerId :: !B.ByteString
     } deriving (Show, Eq)
 
 instance Binary Handshake where

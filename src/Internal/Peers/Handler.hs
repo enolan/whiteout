@@ -93,7 +93,7 @@ connectToPeer sess torst sockAddr =
                 maybeLogPeer sess peerSt Low "Connecting"
                 connect s $ pSockAddr peerSt
                 sendHandshake sess torst s
-                theirHandshake :: Handshake <- decode <$> recvAll s 68
+                theirHandshake <- getHandshake s
                 maybeLogPeer sess peerSt Debug $ B.concat
                     ["Got handshake: ", (BC.pack $ show theirHandshake)]
                 if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
@@ -156,10 +156,7 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
             "New incoming connection: ", pName]
         reqQueue <- newTVarIO S.empty
         interested' <- newTVarIO False
-        theirHandshake :: Handshake <- decode <$> recvAll s 68
-        -- Make sure exceptions related to decoding the handshake are thrown
-        -- here rather than in logToFile &c.
-        evaluate theirHandshake
+        theirHandshake <- getHandshake s
         let
             peerSt = PeerSt
                 {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
@@ -296,6 +293,12 @@ sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
     hResByte5 = 0, hResByte6 = 0, hResByte7 = 0,
     hInfoHash = tInfohash $ sTorrent torst,
     hPeerId = sPeerId sess}
+
+-- | Get the peer's handshake, making sure any exceptions from binary are
+-- thrown here and not in another thread or outside the scope of appropriate
+-- handlers.
+getHandshake :: Socket -> IO Handshake
+getHandshake s = (decode <$> recvAll s 68) >>= evaluate
 
 -- | Send an all \255 bitfield of appropriate length.
 sendFullBitfield :: TorrentSt -> Socket -> IO ()
