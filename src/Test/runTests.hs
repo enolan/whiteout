@@ -7,16 +7,16 @@ import Network.Socket
 import System.Environment
 import Test.Framework
 
-import Network.Whiteout
+import Network.BitTorrent.Whiteout
 import Test.Internal.BEncode
 import Test.Internal.Peers.Handler.Messages
-import Test.Network.Whiteout
+import Test.Network.BitTorrent.Whiteout
 
 tests :: [Test]
 tests = [
     Test.Internal.BEncode.theTests,
     Test.Internal.Peers.Handler.Messages.theTests,
-    Test.Network.Whiteout.theTests
+    Test.Network.BitTorrent.Whiteout.theTests
     ]
 
 main :: IO ()

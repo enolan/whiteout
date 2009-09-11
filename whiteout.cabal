@@ -22,7 +22,7 @@ Library
                         network == 2.*, network-bytestring == 0.1.*,
                         parsec == 2.*, random == 1.0.*, SHA == 1.4.*,
                         stm == 2.*, transformers == 0.1.*
-    Exposed-modules:    Network.Whiteout
+    Exposed-modules:    Network.BitTorrent.Whiteout
     Other-modules:      Internal.Announce, Internal.BEncode,
                         Internal.BEncode.Lexer, Internal.Logging,
                         Internal.Peers, Internal.Peers.Handler,
@@ -48,10 +48,10 @@ Executable runTests
                         Internal.BEncode.Lexer, Internal.Logging,
                         Internal.Peers, Internal.Peers.Handler,
                         Internal.Peers.Handler.Messages, Internal.Pieces,
-                        Internal.Types Network.Whiteout, Test.ArbitraryInstances
-                        Test.Internal.BEncode,
+                        Internal.Types Network.BitTorrent.Whiteout,
+                        Test.ArbitraryInstances, Test.Internal.BEncode,
                         Test.Internal.Peers.Handler.Messages,
-                        Test.Network.Whiteout
+                        Test.Network.BitTorrent.Whiteout
     Hs-source-dirs:     src
     Ghc-options:        -Wall
     Extensions:         DeriveDataTypeable, OverloadedStrings,

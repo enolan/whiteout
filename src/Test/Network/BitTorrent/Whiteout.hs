@@ -1,4 +1,4 @@
-module Test.Network.Whiteout (theTests) where
+module Test.Network.BitTorrent.Whiteout (theTests) where
 
 import Control.Applicative
 import Control.Concurrent.STM
@@ -8,7 +8,7 @@ import Test.Framework
 import Test.Framework.Providers.HUnit
 import Test.HUnit
 
-import Network.Whiteout
+import Network.BitTorrent.Whiteout
 
 theTests :: Test.Framework.Test
 theTests =

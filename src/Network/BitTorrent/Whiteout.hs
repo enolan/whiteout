@@ -1,4 +1,4 @@
-module Network.Whiteout
+module Network.BitTorrent.Whiteout
     (
 -- *Torrents
     Torrent(..),
