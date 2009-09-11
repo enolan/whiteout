@@ -103,7 +103,7 @@ cleanup sess torst = do
         atomically $ do
             allPeerThreadsAreDead <- M.null <$> readTVar (sPeers torst)
             if allPeerThreadsAreDead
-                then return ()
+                then writeTVar (sActivity torst) Stopped
                 else retry
         announceHelper sess torst $ Just A.AStopped
         return True
