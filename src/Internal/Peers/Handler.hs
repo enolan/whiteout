@@ -173,11 +173,14 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
             case mbtorst' of
                 Nothing -> return mbtorst'
                 Just torst -> do
-                    ok <- (==Running) <$> readTVar (sActivity torst)
+                    torIsRunning <- (==Running) <$> readTVar (sActivity torst)
                     peercount <- M.size <$> readTVar (sPeers torst)
-                    --FIXME need to check if we're already connected to this
-                    --peer in another thread.
-                    if ok && peercount <= 50
+                    wereAlreadyConnected <-
+                        F.any (sameIp sockaddr . pSockAddr) <$>
+                            (readTVar . sPeers $ torst)
+                    if torIsRunning &&
+                       peercount <= 50 &&
+                       (not wereAlreadyConnected)
                         then do
                             modifyTVar (sPeers torst) (M.insert tid peerSt)
                             return mbtorst'
@@ -192,6 +195,9 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
                     sendPeerMsg s Unchoke
                     peerHandler sess torst peerSt s
     go (_, _) =
+        error "Got non-IPv4 SockAddr in peerListener"
+    sameIp (SockAddrInet _ host1) (SockAddrInet _ host2) = host1 == host2
+    sameIp _                      _                      =
         error "Got non-IPv4 SockAddr in peerListener"
 
 modifyTVar :: TVar a -> (a -> a) -> STM ()
