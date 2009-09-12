@@ -97,8 +97,6 @@ connectToPeer sess torst sockAddr =
                 if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
                     then error "Wrong infohash in outgoing peer connection!"
                     else return ()
-                sendFullBitfield torst s
-                sendPeerMsg s Unchoke
                 interested' <- newTVarIO False
                 let
                     cPeerSt = ConnectedPeerSt {
@@ -180,8 +178,6 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
                 (atomically $ modifyTVar (sPeers torst) (M.delete tid)) $ do
                     maybeLogPeer sess peerSt Low "Connected."
                     sendHandshake sess torst s
-                    sendFullBitfield torst s
-                    sendPeerMsg s Unchoke
                     peerHandler sess torst peerSt s
     go (_, _) =
         error "Got non-IPv4 SockAddr in peerListener"
@@ -193,21 +189,24 @@ modifyTVar :: TVar a -> (a -> a) -> STM ()
 modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
-peerHandler sess torst peerSt s = bracket
+peerHandler sess torst peerSt s = do
+    sendFullBitfield torst s
+    sendPeerMsg s Unchoke
+    bracket
     -- pieceReqs is a TVar Set rather than a TChan because we need to
     -- support removing requests from the queue. Note this
     -- implementation doesn't preserve request ordering, but the other
     -- clients don't seem to care and the spec isn't explicit.
-    (do
-        readerTid <- myThreadId
-        pieceReqs <- newTVarIO S.empty
-        writerTid <- forkIO $
-            -- Make sure the reader doesn't get widowed if the writer throws an
-            -- exception.
-            onException (peerWriter torst pieceReqs s) (killThread readerTid)
-        return (pieceReqs, writerTid))
-    (killThread . snd)
-    (peerReader . fst)
+        (do
+            readerTid <- myThreadId
+            pieceReqs <- newTVarIO S.empty
+            writerTid <- forkIO $
+                -- Make sure the reader doesn't get widowed if the writer throws
+                -- an exception.
+                onException (peerWriter torst pieceReqs s) (killThread readerTid)
+            return (pieceReqs, writerTid))
+        (killThread . snd)
+        (peerReader . fst)
     where
     peerReader pieceReqs = do
         iter <- enumSocket s $ joinI $ enumPeerMsg $ foreachI $
