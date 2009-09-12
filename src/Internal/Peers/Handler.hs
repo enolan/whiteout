@@ -46,8 +46,6 @@ fromConnectedPeerSt = fromJust . connectedPeerSt
 -- communication between the reader thread, the writer thread and the peer
 -- manager.
 data ConnectedPeerSt = ConnectedPeerSt {
-    pieceReqs :: TVar (S.Set (PieceNum, Word32, Word32)),
-    -- ^ Pieces in the pipeline, to be sent.
     peerId :: B.ByteString,
     interested :: TVar Bool
 
@@ -106,11 +104,9 @@ connectToPeer sess torst sockAddr =
                         fromIntegral $ if rem' /= 0 then quot'+1 else quot'
                 sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
                 sendPeerMsg s Unchoke
-                reqQueue <- newTVarIO S.empty
                 interested' <- newTVarIO False
                 let
                     cPeerSt = ConnectedPeerSt {
-                        pieceReqs = reqQueue,
                         peerId = hPeerId theirHandshake,
                         interested = interested'}
                     peerSt' = PeerSt {
@@ -154,14 +150,12 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
             in flip catches handlers $ do
         atomically . maybeLog sess Debug $ BC.concat [
             "New incoming connection: ", pName]
-        reqQueue <- newTVarIO S.empty
         interested' <- newTVarIO False
         theirHandshake <- getHandshake s
         let
             peerSt = PeerSt
                 {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
             cPeerSt = ConnectedPeerSt {
-                pieceReqs = reqQueue,
                 peerId = hPeerId theirHandshake,
                 interested = interested' }
         maybeLogPeer sess peerSt Debug $ B.concat
@@ -205,26 +199,33 @@ modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket
-        (forkIO $ peerWriter torst (fromConnectedPeerSt peerSt) s)
-        killThread
-        (const peerReader)
+    -- This is a TVar Set rather than a TChan because we need to
+    -- support removing requests from the queue. Note this
+    -- implementation doesn't preserve request ordering, but the other
+    -- clients don't seem to care and the spec isn't explicit.
+    (do
+        pieceReqs <- newTVarIO S.empty
+        tid <- forkIO $ peerWriter torst pieceReqs s
+        return (pieceReqs, tid))
+    (killThread . snd)
+    (peerReader . fst)
     where
-        peerReader = do
-            iter <- enumSocket s $ joinI $ enumPeerMsg $ foreachI $
-                handler sess peerSt
-            run iter
+    peerReader pieceReqs = do
+        iter <- enumSocket s $ joinI $ enumPeerMsg $ foreachI $
+            handler sess peerSt pieceReqs
+        run iter
 
-handler :: Session -> PeerSt -> PeerMsg -> IO Bool
-handler sess peerSt it = do
+handler ::
+    Session -> PeerSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> PeerMsg ->
+    IO Bool
+handler sess peerSt pieceReqs it = do
     maybeLogPeer sess peerSt Debug $ B.concat
         ["Got message: ", BC.pack $ show it]
     case it of
         Request pn off len -> atomically $
-            modifyTVar (pieceReqs . fromConnectedPeerSt $ peerSt) $
-                S.insert (pn, off, len)
+            modifyTVar pieceReqs $ S.insert (pn, off, len)
         Cancel pn off len -> atomically $
-            modifyTVar (pieceReqs . fromConnectedPeerSt $ peerSt) $
-                S.delete (pn, off, len)
+            modifyTVar pieceReqs $ S.delete (pn, off, len)
         Interested -> atomically $
             writeTVar (interested . fromConnectedPeerSt $ peerSt) True
         NotInterested -> atomically $
@@ -232,17 +233,18 @@ handler sess peerSt it = do
         _ -> return ()
     return True
 
-peerWriter :: TorrentSt -> ConnectedPeerSt -> Socket -> IO ()
-peerWriter torst (ConnectedPeerSt {pieceReqs = pieceReqs'}) s = loop
+peerWriter ::
+    TorrentSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket -> IO ()
+peerWriter torst pieceReqs s = loop
+--FIXME Need an exception handler here so the reader thread doesn't get lonely.
     where
     loop = do
         (pn, offset, len) <- atomically $ do
-            pieceReqs'' <- readTVar pieceReqs'
-            if S.null pieceReqs''
-                then retry
-                else do
-                    let (req, pieceReqs''') = S.deleteFindMin pieceReqs''
-                    writeTVar pieceReqs' pieceReqs'''
+            pieceReqs' <- readTVar pieceReqs
+            case S.minView pieceReqs' of
+                Nothing -> retry
+                Just (req, pieceReqs'') -> do
+                    writeTVar pieceReqs pieceReqs''
                     return req
         dataToSend <-
             (B.take (fromIntegral len) . B.drop (fromIntegral offset)) <$>
