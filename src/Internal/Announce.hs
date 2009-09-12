@@ -56,7 +56,8 @@ announce sess torst at = do
                 Right r -> case bRead (rspBody r) of
                     Nothing -> error "couldn't decode response!"
                     Just x -> case decodeAnnounceResp x of
-                        Left Nothing -> error "Error decoding announce response."
+                        Left Nothing ->
+                            error "Error decoding announce response."
                         Left (Just err) -> error $
                             "Got error from tracker: " ++ BC.unpack err
                         Right ar -> return (interval ar, peers ar)
