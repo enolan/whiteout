@@ -97,12 +97,7 @@ connectToPeer sess torst sockAddr =
                 if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
                     then error "Wrong infohash in outgoing peer connection!"
                     else return ()
-                let
-                    numPieces = snd $ bounds $ tPieceHashes $ sTorrent torst
-                    (quot', rem') = quotRem numPieces 8
-                    bitFieldLen =
-                        fromIntegral $ if rem' /= 0 then quot'+1 else quot'
-                sendPeerMsg s $ Bitfield $ B.replicate bitFieldLen 255
+                sendFullBitfield torst s
                 sendPeerMsg s Unchoke
                 interested' <- newTVarIO False
                 let
