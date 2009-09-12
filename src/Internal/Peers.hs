@@ -68,7 +68,7 @@ startTorrent sess torst = do
 
 -- This is the peer manager. There is one peer manager for each running
 -- torrent. The idiom in WaitThenDoStuff is waiting for some event/state with
--- STM retry then doing some action and signalling whether to exit; e.g.
+-- STM's retry then doing some action and signalling whether to exit; e.g.
 -- waiting for the announce timer to go off and announcing or waiting for the
 -- Activity of the TorrentSt to be Stopping then killing all the connections.
 -- We combine a prioritized list of WaitThenDoStuff with orElse to do
