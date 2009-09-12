@@ -29,7 +29,7 @@ Library
                         Internal.Peers.Handler.Messages, Internal.Pieces,
                         Internal.Types
     Hs-source-dirs:     src
-    Ghc-options:        -Wall
+    Ghc-options:        -Wall -Werror
     Extensions:         DeriveDataTypeable, OverloadedStrings,
                         ScopedTypeVariables
 
@@ -53,6 +53,6 @@ Executable runTests
                         Test.Internal.Peers.Handler.Messages,
                         Test.Network.BitTorrent.Whiteout
     Hs-source-dirs:     src
-    Ghc-options:        -Wall
+    Ghc-options:        -Wall -Werror
     Extensions:         DeriveDataTypeable, OverloadedStrings,
                         ScopedTypeVariables
