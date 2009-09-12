@@ -98,7 +98,7 @@ checkDictsValid :: BEncode -> Bool
 checkDictsValid (BInt _)    = True
 checkDictsValid (BString _) = True
 checkDictsValid (BList xs)  = all checkDictsValid xs
-checkDictsValid (BDict d)   = Map.valid d && (all checkDictsValid $ Map.elems d)
+checkDictsValid (BDict d)   = Map.valid d && all checkDictsValid (Map.elems d)
 
 bPack :: BEncode -> L.ByteString
 bPack = runPut . bPut

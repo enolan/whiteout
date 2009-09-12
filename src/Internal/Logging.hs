@@ -16,7 +16,7 @@ maybeLog sess level msg = case logChan sess of
 -- | Directs the passed logging channel to console.
 logToConsole :: TChan (LogLevel, B.ByteString) -> IO ()
 logToConsole chan = do
-    forkIO $ forever $ (atomically $ readTChan chan) >>= print
+    forkIO $ forever $ atomically (readTChan chan) >>= print
     return ()
 
 -- | Directs the passed logging channel to a given file. Overwrites the content
@@ -26,5 +26,5 @@ logToFile path chan = do
     forkIO $ withFile path WriteMode $ \h -> do
         hSetBuffering h LineBuffering
         forever $
-            (atomically $ readTChan chan) >>= hPrint h
+            atomically (readTChan chan) >>= hPrint h
     return ()

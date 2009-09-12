@@ -112,8 +112,7 @@ decodeAnnounceResp' dict = do
         -- seen a tracker that won't send packed peer info yet. When this bites
         -- you, chalk it up to my laziness and general failure as a human being.
         _ -> Nothing
-    return $ AnnounceResp
-        {
+    return AnnounceResp {
         interval = interval',
         peers = peers''
         }

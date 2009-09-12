@@ -36,7 +36,7 @@ import Control.Applicative
 import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.STM
 import Control.Exception as C
-import Control.Monad (replicateM, when)
+import Control.Monad hiding (mapM_)
 import Data.Array.IArray ((!), bounds, listArray)
 import Data.Array.MArray (newArray, readArray, writeArray)
 import qualified Data.ByteString.Char8 as B
@@ -106,7 +106,7 @@ toTorrent benc = do
          tPieceLen = fromIntegral pieceLen,
          tPieceHashes =
             listArray
-                (0,(fromIntegral $ B.length pieceHashes `div` 20) - 1)
+                (0,fromIntegral (B.length pieceHashes `div` 20) - 1)
                 pieceHashes',
          tInfohash = infohash,
          tFiles = files
@@ -183,15 +183,11 @@ close sess = do
     atomically $ do
         torrents' <- M.elems <$> readTVar (torrents sess)
         activities <- mapM (readTVar . sActivity) torrents'
-        if all (== Stopped) $ activities
-            then return ()
-            else retry
+        unless (all (== Stopped) activities) retry
     where
     maybeStopTorrent torst = do
         act <- getActivity torst
-        if act == Running
-            then stopTorrent sess torst
-            else return ()
+        when (act == Running) $ stopTorrent sess torst
 
 -- | Get the currently active torrents, keyed by infohash. A torrent is active
 -- as long as it has been 'addTorrent'ed; one can be simultaneous active and
@@ -293,7 +289,7 @@ beginVerifyingTorrent sess torst = do
                         "verifier thread: couldn't read a piece, aborting."
                 Just piece' -> do
                     let
-                        expected = (tPieceHashes $ sTorrent torst) ! piecenum
+                        expected = tPieceHashes (sTorrent torst) ! piecenum
                         actual = B.concat $ L.toChunks $ bytestringDigest $
                             sha1 $ L.fromChunks [piece']
                     if actual == expected
@@ -302,6 +298,6 @@ beginVerifyingTorrent sess torst = do
                         else atomically $
                             writeArray (sCompletion torst) piecenum False
                     if piecenum ==
-                        (snd $ bounds $ tPieceHashes $ sTorrent torst)
+                        snd (bounds $ tPieceHashes $ sTorrent torst)
                         then atomically $ writeTVar (sActivity torst) Stopped
                         else verify (piecenum+1)

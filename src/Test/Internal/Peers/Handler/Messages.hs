@@ -35,7 +35,7 @@ theTests = testGroup "Internal.Peer.Messages" [
     ]
 
 handshakeRoundTrip :: Handshake -> Bool
-handshakeRoundTrip h = (decode $ encode h) == h
+handshakeRoundTrip h = decode (encode h) == h
 
 instance Arbitrary Handshake where
     arbitrary = do
@@ -52,7 +52,7 @@ instance Arbitrary Handshake where
             }
 
 peerMsgRoundTrip :: PeerMsg -> Bool
-peerMsgRoundTrip p = (decode $ encode p) == p
+peerMsgRoundTrip p = decode (encode p) == p
 
 instance Arbitrary PeerMsg where
     arbitrary = oneof [

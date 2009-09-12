@@ -72,11 +72,8 @@ connectToPeer sess torst sockAddr =
                     wereAlreadyConnected <-
                         F.any ((==sockAddr) . pSockAddr) <$>
                             (readTVar . sPeers $ torst)
-                    if wereAlreadyConnected
-                        then error
-                            "Already connected to this peer in a different \
-                            \thread."
-                        else return ()
+                    when wereAlreadyConnected $ error
+                        "Already connected to this peer in a different thread."
                     let
                         peerSt = PeerSt
                             {connectedPeerSt = Nothing, pSockAddr = sockAddr}
@@ -94,9 +91,8 @@ connectToPeer sess torst sockAddr =
                 theirHandshake <- getHandshake s
                 maybeLogPeer sess peerSt Debug $ B.concat
                     ["Got handshake: ", (BC.pack $ show theirHandshake)]
-                if hInfoHash theirHandshake /= tInfohash (sTorrent torst)
-                    then error "Wrong infohash in outgoing peer connection!"
-                    else return ()
+                when (hInfoHash theirHandshake /= tInfohash (sTorrent torst)) $
+                    error "Wrong infohash in outgoing peer connection!"
                 interested' <- newTVarIO False
                 let
                     cPeerSt = ConnectedPeerSt {
@@ -156,7 +152,7 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
         tid <- myThreadId
         mbtorst <- atomically $ do
             mbtorst' <- M.lookup (hInfoHash theirHandshake) <$>
-                (readTVar $ torrents sess)
+                readTVar (torrents sess)
             case mbtorst' of
                 Nothing -> return mbtorst'
                 Just torst -> do
@@ -167,7 +163,7 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
                             (readTVar . sPeers $ torst)
                     if torIsRunning &&
                        peercount <= 50 &&
-                       (not wereAlreadyConnected)
+                       not wereAlreadyConnected
                         then do
                             modifyTVar (sPeers torst) (M.insert tid peerSt)
                             return mbtorst'

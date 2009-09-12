@@ -57,9 +57,7 @@ startTorrent sess torst = do
         case activity of
             Stopped -> writeTVar (sActivity torst) Running >> return True
             _ -> return False
-    if goAhead
-        then return ()
-        else throwIO BadState
+    unless goAhead $ throwIO BadState
     atomically . maybeLog sess Medium . BC.concat $
         ["Starting torrent: \"", tName . sTorrent $ torst, "\""]
     announceHelper sess torst (Just A.AStarted)
@@ -81,9 +79,7 @@ peerManager sess torst = do
     let alternatives = map (flip ($ sess) torst)
             [cleanup, announce, getNextPeer]
     exit <- join . atomically . foldr1 orElse $ alternatives
-    if exit
-        then return ()
-        else peerManager sess torst
+    unless exit $ peerManager sess torst
 
 -- Check if stopTorrent has been called and if so clean up and exit.
 cleanup :: WaitThenDoStuff
@@ -98,7 +94,7 @@ cleanup sess torst = do
         Stopping -> return go
     where
     go = do
-        peerThreadIds <- M.keys <$> (atomically $ readTVar $ sPeers torst)
+        peerThreadIds <- M.keys <$> atomically (readTVar $ sPeers torst)
         mapM_ killThread peerThreadIds
         atomically $ do
             allPeerThreadsAreDead <- M.null <$> readTVar (sPeers torst)
@@ -111,7 +107,7 @@ cleanup sess torst = do
 -- If it's time to announce, announce.
 announce :: WaitThenDoStuff
 announce sess torst = do
-    itsTime <- (readTVar $ sTimeToAnnounce torst) >>= readTVar
+    itsTime <- readTVar (sTimeToAnnounce torst) >>= readTVar
     if itsTime
         then return go
         else retry
@@ -159,8 +155,7 @@ announceHelper sess torst at = do
     handlers = [Handler $ \(e :: ErrorCall) -> handleEx e,
                 Handler $ \(e :: IOException) -> handleEx e]
     handleEx e = do
-        atomically $ do
-            maybeLog sess Critical . BC.concat $
+        atomically . maybeLog sess Critical . BC.concat $
                 ["Error in announce : \"", BC.pack $ show e, "\". Waiting 120",
                 " seconds and trying again."]
         -- Guess where I pulled 120 seconds from. Maybe we should do
@@ -177,11 +172,10 @@ genericRegisterDelay microsecs = do
     return tv
     where
     maxWait = maxBound :: Int
-    go tv microsecs' = do
-        if (fromIntegral maxWait) < microsecs'
-            then do
-                threadDelay maxWait
-                go tv $ microsecs' - (fromIntegral maxWait)
-            else do
-                threadDelay $ fromIntegral microsecs'
-                atomically $ writeTVar tv True
+    go tv microsecs' = if fromIntegral maxWait < microsecs'
+        then do
+            threadDelay maxWait
+            go tv $ microsecs' - fromIntegral maxWait
+        else do
+            threadDelay $ fromIntegral microsecs'
+            atomically $ writeTVar tv True

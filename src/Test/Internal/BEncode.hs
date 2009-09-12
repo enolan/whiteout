@@ -40,4 +40,4 @@ instance (Arbitrary k, Arbitrary v, Ord k) => Arbitrary (Map k v) where
     shrink = map M.fromList . shrink . M.toList
 
 bencodeRoundTrip :: BEncode -> Bool
-bencodeRoundTrip x = (bRead $ bPack x) == Just x
+bencodeRoundTrip x = bRead (bPack x) == Just x

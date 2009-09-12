@@ -18,7 +18,7 @@ getPiece :: TorrentSt -> PieceNum -> IO (Maybe ByteString)
 getPiece torst piecenum = let
     tor = sTorrent torst
     offset =
-        (fromIntegral piecenum) * (fromIntegral $ tPieceLen $ sTorrent torst)
+        (fromIntegral piecenum) * fromIntegral (tPieceLen $ sTorrent torst)
     in
         C.catch
             (case tFiles $ sTorrent torst of
