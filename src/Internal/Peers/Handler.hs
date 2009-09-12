@@ -204,9 +204,13 @@ peerHandler sess torst peerSt s = bracket
     -- implementation doesn't preserve request ordering, but the other
     -- clients don't seem to care and the spec isn't explicit.
     (do
+        readerTid <- myThreadId
         pieceReqs <- newTVarIO S.empty
-        tid <- forkIO $ peerWriter torst pieceReqs s
-        return (pieceReqs, tid))
+        writerTid <- forkIO $
+            -- Make sure the reader doesn't get widowed if the writer throws an
+            -- exception.
+            onException (peerWriter torst pieceReqs s) (killThread readerTid)
+        return (pieceReqs, writerTid))
     (killThread . snd)
     (peerReader . fst)
     where
@@ -236,7 +240,6 @@ handler sess peerSt pieceReqs it = do
 peerWriter ::
     TorrentSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket -> IO ()
 peerWriter torst pieceReqs s = loop
---FIXME Need an exception handler here so the reader thread doesn't get lonely.
     where
     loop = do
         (pn, offset, len) <- atomically $ do
