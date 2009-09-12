@@ -159,13 +159,14 @@ announceHelper sess torst at = do
     handlers = [Handler $ \(e :: ErrorCall) -> handleEx e,
                 Handler $ \(e :: IOException) -> handleEx e]
     handleEx e = do
-        tv <- genericRegisterDelay $ (120 * 1000000 :: Integer)
-        -- Guess where I pulled 120 seconds from. Maybe we should do
-        -- exponential backoff...
         atomically $ do
             maybeLog sess Critical . BC.concat $
-                ["Error in announce : \"", BC.pack $ show e, "\""]
-            writeTVar (sTimeToAnnounce torst) tv
+                ["Error in announce : \"", BC.pack $ show e, "\". Waiting 120",
+                " seconds and trying again."]
+        -- Guess where I pulled 120 seconds from. Maybe we should do
+        -- exponential backoff...
+        threadDelay $ 120 * 1000000
+        go
 
 -- | Generified version of registerDelay. Needed because on a 32-bit machine,
 -- the maximum wait of a normal registerDelay is only 35 minutes.
