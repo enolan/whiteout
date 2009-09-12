@@ -199,7 +199,7 @@ modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = bracket
-    -- This is a TVar Set rather than a TChan because we need to
+    -- pieceReqs is a TVar Set rather than a TChan because we need to
     -- support removing requests from the queue. Note this
     -- implementation doesn't preserve request ordering, but the other
     -- clients don't seem to care and the spec isn't explicit.
