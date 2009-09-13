@@ -1,6 +1,7 @@
 module Internal.Peers.Handler
     (
     PeerSt(..),
+    ConnectedPeerSt(..),
     connectToPeer,
     peerListener
     ) where
@@ -47,11 +48,21 @@ fromConnectedPeerSt = fromJust . connectedPeerSt
 -- manager.
 data ConnectedPeerSt = ConnectedPeerSt {
     peerId :: B.ByteString,
-    interested :: TVar Bool
+    they'reInterested :: TVar Bool,
+    we'reInterested :: TVar Bool,
+    they'reChoked :: TVar Bool,
+    we'reChoked :: TVar Bool
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
-    -- the global one, and a bitfield, and track choke/interest state here.
+    -- the global one and a bitfield.
     }
+
+mkConnectedPeerSt :: B.ByteString -> IO ConnectedPeerSt
+mkConnectedPeerSt peerId' = ConnectedPeerSt peerId'
+    <$> newTVarIO False
+    <*> newTVarIO False
+    <*> newTVarIO True
+    <*> newTVarIO True
 
 -- | Connect to a new peer.
 connectToPeer ::
@@ -93,11 +104,8 @@ connectToPeer sess torst sockAddr =
                     ["Got handshake: ", (BC.pack $ show theirHandshake)]
                 when (hInfoHash theirHandshake /= tInfohash (sTorrent torst)) $
                     error "Wrong infohash in outgoing peer connection!"
-                interested' <- newTVarIO False
+                cPeerSt <- mkConnectedPeerSt $ hPeerId theirHandshake
                 let
-                    cPeerSt = ConnectedPeerSt {
-                        peerId = hPeerId theirHandshake,
-                        interested = interested'}
                     peerSt' = PeerSt {
                         connectedPeerSt = Just cPeerSt,
                         pSockAddr = pSockAddr peerSt}
@@ -139,14 +147,11 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
             in flip catches handlers $ do
         atomically . maybeLog sess Debug $ BC.concat [
             "New incoming connection: ", pName]
-        interested' <- newTVarIO False
         theirHandshake <- getHandshake s
+        cPeerSt <- mkConnectedPeerSt $ hPeerId theirHandshake
         let
             peerSt = PeerSt
                 {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
-            cPeerSt = ConnectedPeerSt {
-                peerId = hPeerId theirHandshake,
-                interested = interested' }
         maybeLogPeer sess peerSt Debug $ B.concat
             ["Got handshake: ", (BC.pack $ show theirHandshake)]
         tid <- myThreadId
@@ -187,7 +192,7 @@ modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = do
     sendFullBitfield torst s
-    sendPeerMsg s Unchoke
+    atomically $ writeTVar (they'reChoked . fromConnectedPeerSt $ peerSt) False
     bracket
     -- pieceReqs is a TVar Set rather than a TChan because we need to
     -- support removing requests from the queue. Note this
@@ -199,7 +204,9 @@ peerHandler sess torst peerSt s = do
             writerTid <- forkIO $
                 -- Make sure the reader doesn't get widowed if the writer throws
                 -- an exception.
-                onException (peerWriter torst pieceReqs s) (killThread readerTid)
+                onException
+                    (peerWriter torst peerSt pieceReqs s)
+                    (killThread readerTid)
             return (pieceReqs, writerTid))
         (killThread . snd)
         (peerReader . fst)
@@ -221,29 +228,72 @@ handler sess peerSt pieceReqs it = do
         Cancel pn off len -> atomically $
             modifyTVar pieceReqs $ S.delete (pn, off, len)
         Interested -> atomically $
-            writeTVar (interested . fromConnectedPeerSt $ peerSt) True
+            writeTVar (they'reInterested . fromConnectedPeerSt $ peerSt) True
         NotInterested -> atomically $
-            writeTVar (interested . fromConnectedPeerSt $ peerSt) False
+            writeTVar (they'reInterested . fromConnectedPeerSt $ peerSt) False
         _ -> return ()
     return True
 
 peerWriter ::
-    TorrentSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket -> IO ()
-peerWriter torst pieceReqs s = loop
+    TorrentSt -> PeerSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket ->
+    IO ()
+peerWriter torst peerSt pieceReqs s = loop False True
     where
-    loop = do
-        (pn, offset, len) <- atomically $ do
-            pieceReqs' <- readTVar pieceReqs
-            case S.minView pieceReqs' of
-                Nothing -> retry
-                Just (req, pieceReqs'') -> do
-                    writeTVar pieceReqs pieceReqs''
-                    return req
+    -- Interest/choking state as sent.
+    loop we'reInterested' they'reChoked' = do
+        mbNewChokeInterest <- join . atomically $ orElse
+            (updateChokeOrInterest
+                (fromConnectedPeerSt peerSt)
+                we'reInterested'
+                they'reChoked'
+                s)
+            (sendPiece torst pieceReqs s)
+        case mbNewChokeInterest of
+            Nothing -> loop we'reInterested' they'reChoked'
+            Just interestAndChokeState -> uncurry loop interestAndChokeState
+
+updateChokeOrInterest ::
+    ConnectedPeerSt -> Bool -> Bool -> Socket -> STM (IO (Maybe (Bool, Bool)))
+updateChokeOrInterest peerSt we'reInterested' they'reChoked' s = do
+    updateInterest <-
+        (/= we'reInterested') <$> readTVar (we'reInterested peerSt)
+    updateChoking <-
+        (/= they'reChoked') <$> readTVar (they'reChoked peerSt)
+    unless (updateInterest || updateChoking) retry
+    return $ go updateInterest updateChoking
+    where
+    go updateInterest updateChoking = do
+        when updateInterest $ sendPeerMsg s $ if we'reInterested'
+            then NotInterested
+            else Interested
+        when updateChoking $ sendPeerMsg s $ if they'reChoked'
+            then Unchoke
+            else Choke
+        return $ Just
+            (we'reInterested' `logicalXor` updateInterest,
+             they'reChoked' `logicalXor` updateChoking)
+    logicalXor True True   = False
+    logicalXor True False  = True
+    logicalXor False True  = True
+    logicalXor False False = False
+
+sendPiece ::
+    TorrentSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket ->
+    STM (IO (Maybe (Bool, Bool)))
+sendPiece torst pieceReqs s = do
+    pieceReqs' <- readTVar pieceReqs
+    case S.minView pieceReqs' of
+        Nothing -> retry
+        Just (req, pieceReqs'') -> do
+            writeTVar pieceReqs pieceReqs''
+            return $ go req
+    where
+    go (pn, offset, len) = do
         dataToSend <-
             (B.take (fromIntegral len) . B.drop (fromIntegral offset)) <$>
             fromJust <$> getPiece torst pn
         sendPeerMsg s $ Piece pn offset dataToSend
-        loop
+        return Nothing
 
 -- Poor man's mapStreamM?
 foreachI :: Monad m => (el -> m Bool) -> IterateeG [] el m ()
