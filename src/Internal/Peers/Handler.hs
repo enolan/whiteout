@@ -192,7 +192,6 @@ modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = do
     sendFullBitfield torst s
-    atomically $ writeTVar (they'reChoked . fromConnectedPeerSt $ peerSt) False
     bracket
     -- pieceReqs is a TVar Set rather than a TChan because we need to
     -- support removing requests from the queue. Note this
@@ -227,8 +226,9 @@ handler sess peerSt pieceReqs it = do
             modifyTVar pieceReqs $ S.insert (pn, off, len)
         Cancel pn off len -> atomically $
             modifyTVar pieceReqs $ S.delete (pn, off, len)
-        Interested -> atomically $
+        Interested -> atomically $ do
             writeTVar (they'reInterested . fromConnectedPeerSt $ peerSt) True
+            writeTVar (they'reChoked     . fromConnectedPeerSt $ peerSt) False
         NotInterested -> atomically $
             writeTVar (they'reInterested . fromConnectedPeerSt $ peerSt) False
         _ -> return ()
