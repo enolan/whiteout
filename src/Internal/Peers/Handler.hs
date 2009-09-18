@@ -23,7 +23,7 @@ import Data.Iteratee.Base as Iter
 import Data.Iteratee.Binary
 import Data.Iteratee.WrappedByteString
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
+import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Set as S
 import Network.Socket hiding (Debug) -- clashes with the LogLevel
 import qualified Network.Socket.ByteString as SB
@@ -51,7 +51,8 @@ data ConnectedPeerSt = ConnectedPeerSt {
     they'reInterested :: TVar Bool,
     we'reInterested :: TVar Bool,
     they'reChoked :: TVar Bool,
-    we'reChoked :: TVar Bool
+    we'reChoked :: TVar Bool,
+    chokeTimer :: TVar (TVar Bool) -- Used with genericRegisterDelay
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one and a bitfield.
@@ -63,6 +64,7 @@ mkConnectedPeerSt peerId' = ConnectedPeerSt peerId'
     <*> newTVarIO False
     <*> newTVarIO True
     <*> newTVarIO True
+    <*> (newTVarIO False >>= newTVarIO)
 
 -- | Connect to a new peer.
 connectToPeer ::
@@ -192,7 +194,6 @@ modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
 peerHandler :: Session -> TorrentSt -> PeerSt -> Socket -> IO ()
 peerHandler sess torst peerSt s = do
     sendFullBitfield torst s
-    atomically $ writeTVar (they'reChoked . fromConnectedPeerSt $ peerSt) False
     bracket
     -- pieceReqs is a TVar Set rather than a TChan because we need to
     -- support removing requests from the queue. Note this
@@ -205,8 +206,8 @@ peerHandler sess torst peerSt s = do
                 -- Make sure the reader doesn't get widowed if the writer throws
                 -- an exception.
                 onException
-                    (peerWriter torst peerSt pieceReqs s)
-                    (killThread readerTid)
+                    (peerWriter sess torst peerSt pieceReqs s)
+                    (killThread readerTid) --FIXME should log.
             return (pieceReqs, writerTid))
         (killThread . snd)
         (peerReader . fst)
@@ -235,15 +236,16 @@ handler sess peerSt pieceReqs it = do
     return True
 
 peerWriter ::
-    TorrentSt -> PeerSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket ->
-    IO ()
-peerWriter torst peerSt pieceReqs s = loop False True
+    Session -> TorrentSt -> PeerSt -> TVar (S.Set (PieceNum, Word32, Word32)) ->
+    Socket -> IO ()
+peerWriter sess torst peerSt pieceReqs s = loop False True
     where
     -- Interest/choking state as sent.
     loop we'reInterested' they'reChoked' = do
         mbNewChokeInterest <- join . atomically $ orElse
             (updateChokeOrInterest
-                (fromConnectedPeerSt peerSt)
+                sess
+                peerSt
                 we'reInterested'
                 they'reChoked'
                 s)
@@ -253,25 +255,38 @@ peerWriter torst peerSt pieceReqs s = loop False True
             Just interestAndChokeState -> uncurry loop interestAndChokeState
 
 updateChokeOrInterest ::
-    ConnectedPeerSt -> Bool -> Bool -> Socket -> STM (IO (Maybe (Bool, Bool)))
-updateChokeOrInterest peerSt we'reInterested' they'reChoked' s = do
-    updateInterest <-
-        (/= we'reInterested') <$> readTVar (we'reInterested peerSt)
-    updateChoking <-
-        (/= they'reChoked') <$> readTVar (they'reChoked peerSt)
+    Session -> PeerSt -> Bool -> Bool -> Socket ->
+    STM (IO (Maybe (Bool, Bool)))
+updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s = do
+    updateInterest <- (/= we'reInterested') <$>
+        readTVar (we'reInterested $ fromConnectedPeerSt peerSt)
+    updateChoking <- (/= they'reChoked') <$>
+        readTVar (they'reChoked $ fromConnectedPeerSt peerSt)
     unless (updateInterest || updateChoking) retry
     return $ go updateInterest updateChoking
     where
+--FIXME
+--FIXME Need to toss piece queue when choking and not respond to requests if
+--FIXME they're choked.
+--FIXME
     go updateInterest updateChoking = do
-        when updateInterest $ sendPeerMsg s $ if we'reInterested'
-            then NotInterested
-            else Interested
-        when updateChoking $ sendPeerMsg s $ if they'reChoked'
-            then Unchoke
-            else Choke
+        let
+            updateMessage trueMsg falseMsg update prevState = if update
+                then Just $ if prevState then falseMsg else trueMsg
+                else Nothing
+            mbUpdateInterestMsg =
+                updateMessage
+                    Interested NotInterested updateInterest we'reInterested'
+            mbUpdateChokingMsg =
+                updateMessage Choke Unchoke updateChoking they'reChoked'
+            msgsToSend = catMaybes [mbUpdateInterestMsg, mbUpdateChokingMsg]
+        maybeLogPeer sess peerSt Debug $ BC.concat
+            ["Sending message(s): ", BC.pack $ show msgsToSend]
+        mapM_ (sendPeerMsg s) msgsToSend
         return $ Just
             (we'reInterested' `logicalXor` updateInterest,
              they'reChoked' `logicalXor` updateChoking)
+    -- There's a 'xor' in Data.Bits, but none for Bool in the libraries. :(
     logicalXor True True   = False
     logicalXor True False  = True
     logicalXor False True  = True
