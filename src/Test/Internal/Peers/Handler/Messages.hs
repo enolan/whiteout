@@ -5,6 +5,7 @@ import Control.Applicative
 import Control.Monad (ap, replicateM)
 import Control.Monad.Identity
 import Data.Binary
+import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Iteratee.Base
@@ -31,7 +32,9 @@ theTests = testGroup "Internal.Peer.Messages" [
     testProperty "decodeINChunkRoundTrip - Handshake"
         (decodeINChunkRoundTrip :: Handshake -> Positive Int -> Bool),
     testProperty "decodeINChunkRoundTrip - Word32"
-        (decodeINChunkRoundTrip :: Word32 -> Positive Int -> Bool)
+        (decodeINChunkRoundTrip :: Word32 -> Positive Int -> Bool),
+    testProperty "enumPeerMsgRoundTrip1Chunk" enumPeerMsgRoundTrip1Chunk,
+    testProperty "enumPeerMsgRoundTripNChunk" enumPeerMsgRoundTripNChunk
     ]
 
 handshakeRoundTrip :: Handshake -> Bool
@@ -86,3 +89,31 @@ decodeINChunkRoundTrip x (Positive n) = x == decoded
     bsIn = B.concat $ L.toChunks $ encode x
     decoded = runIdentity $ run $ runIdentity $ enumPureNChunk (WrapBS bsIn) n
         decodeI
+
+serializePeerMsgs :: [PeerMsg] -> B.ByteString
+serializePeerMsgs = B.concat . L.toChunks . runPut . mapM_ serialize
+    where
+    serialize :: PeerMsg -> Put
+    serialize msg = do
+        let msg' = encode msg
+        putWord32be $ fromIntegral $ L.length msg'
+        putLazyByteString msg'
+
+enumPeerMsgRoundTrip1Chunk :: [PeerMsg] -> Bool
+enumPeerMsgRoundTrip1Chunk msgs = runIdentity $ do
+    let iter = joinI $ enumPeerMsg stream2list
+    iter' <- enumPure1Chunk
+        (WrapBS $ serializePeerMsgs msgs)
+        iter
+    msgs' <- run iter'
+    return $ msgs' == msgs
+
+enumPeerMsgRoundTripNChunk :: [PeerMsg] -> Positive Int -> Bool
+enumPeerMsgRoundTripNChunk msgs (Positive n) = runIdentity $ do
+    let iter = joinI $ enumPeerMsg stream2list
+    iter' <- enumPureNChunk
+        (WrapBS $ serializePeerMsgs msgs)
+        n
+        iter
+    msgs' <- run iter'
+    return $ msgs' == msgs

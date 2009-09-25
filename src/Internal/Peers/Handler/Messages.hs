@@ -4,7 +4,8 @@ module Internal.Peers.Handler.Messages
     (
     Handshake(..),
     PeerMsg(..),
-    decodeI
+    decodeI,
+    enumPeerMsg
     )
     where
 
@@ -16,7 +17,8 @@ import Data.Binary.Put (putByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.ByteString.Char8 () -- isString instance
-import Data.Iteratee.Base
+import Data.Iteratee.Base as Iter
+import Data.Iteratee.Binary
 import Data.Iteratee.WrappedByteString
 import Data.Word (Word8, Word32)
 
@@ -120,3 +122,19 @@ decodeI = IterateeG $ step []
     step _xs (EOF (Just err))   = return $ Cont (throwErr err) (Just err)
     step xs (Chunk (WrapBS bs)) =
         return $ Cont (IterateeG $ step (bs:xs)) Nothing
+
+-- Enumerator of BT PeerMsgs with length prefixes.
+enumPeerMsg :: (Monad m, Functor m) =>
+    EnumeratorN WrappedByteString Word8 [] PeerMsg m a
+enumPeerMsg = convStream convPeerMsgs
+    where
+    convPeerMsgs = eitherToMaybe <$> checkErr ((:[]) <$> getPeerMsg)
+    eitherToMaybe (Left  _) = Nothing
+    eitherToMaybe (Right x) = Just x
+
+getPeerMsg :: Monad m => IterateeG WrappedByteString Word8 m PeerMsg
+getPeerMsg = do
+    len <- endianRead4 MSB
+    case len of
+        0 -> getPeerMsg -- Zero length messages are keepalives.
+        _ -> joinI $ Iter.take (fromIntegral len) decodeI

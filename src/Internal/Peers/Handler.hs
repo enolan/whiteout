@@ -20,7 +20,6 @@ import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
-import Data.Iteratee.Binary
 import Data.Iteratee.WrappedByteString
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromJust)
@@ -315,22 +314,6 @@ foreachI f = IterateeG step
     step   (Chunk (x:xs))       = do
         continue <- f x
         if continue then step (Chunk xs) else return $ Done () (Chunk xs)
-
--- Enumerator of BT PeerMsgs with length prefixes.
-enumPeerMsg :: (Monad m, Functor m) =>
-    EnumeratorN WrappedByteString Word8 [] PeerMsg m a
-enumPeerMsg = convStream convPeerMsgs
-    where
-    convPeerMsgs = eitherToMaybe <$> checkErr ((:[]) <$> getPeerMsg)
-    eitherToMaybe (Left  _) = Nothing
-    eitherToMaybe (Right x) = Just x
-
-getPeerMsg :: Monad m => IterateeG WrappedByteString Word8 m PeerMsg
-getPeerMsg = do
-    len <- endianRead4 MSB
-    case len of
-        0 -> getPeerMsg -- Zero length messages are keepalives.
-        _ -> joinI $ Iter.take (fromIntegral len) decodeI
 
 -- | Run an iteratee over input from a socket. The socket must be connected.
 -- This is equivalent to enumFd modulo the blocking problem. Totally did not
