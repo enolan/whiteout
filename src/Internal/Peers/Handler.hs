@@ -304,17 +304,6 @@ sendPiece torst pieceReqs s = do
         sendPeerMsg s $ Piece pn offset dataToSend
         return Nothing
 
--- Poor man's mapStreamM?
-foreachI :: Monad m => (el -> m Bool) -> IterateeG [] el m ()
-foreachI f = IterateeG step
-    where
-    step s@(EOF Nothing)    = return $ Done () s
-    step   (EOF (Just err)) = return $ Cont (throwErr err) (Just err)
-    step   (Chunk [])       = return $ Cont (foreachI f) Nothing
-    step   (Chunk (x:xs))       = do
-        continue <- f x
-        if continue then step (Chunk xs) else return $ Done () (Chunk xs)
-
 -- | Run an iteratee over input from a socket. The socket must be connected.
 -- This is equivalent to enumFd modulo the blocking problem. Totally did not
 -- realize you could call read() on a socket. Once the blocking issue with

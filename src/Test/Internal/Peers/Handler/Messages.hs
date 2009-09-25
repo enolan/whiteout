@@ -4,12 +4,14 @@ module Test.Internal.Peers.Handler.Messages (theTests) where
 import Control.Applicative
 import Control.Monad (ap, replicateM)
 import Control.Monad.Identity
+import Control.Monad.ST
 import Data.Binary
 import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Iteratee.Base
 import Data.Iteratee.WrappedByteString
+import Data.STRef
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck
@@ -34,7 +36,10 @@ theTests = testGroup "Internal.Peer.Messages" [
     testProperty "decodeINChunkRoundTrip - Word32"
         (decodeINChunkRoundTrip :: Word32 -> Positive Int -> Bool),
     testProperty "enumPeerMsgRoundTrip1Chunk" enumPeerMsgRoundTrip1Chunk,
-    testProperty "enumPeerMsgRoundTripNChunk" enumPeerMsgRoundTripNChunk
+    testProperty "enumPeerMsgRoundTripNChunk" enumPeerMsgRoundTripNChunk,
+    testProperty "enumPeerMsgActionsRoundTrip" enumPeerMsgActionsRoundTrip,
+    testProperty "enumPeerMsgActionsRoundTripNoRun"
+        enumPeerMsgActionsRoundTripNoRun
     ]
 
 handshakeRoundTrip :: Handshake -> Bool
@@ -117,3 +122,26 @@ enumPeerMsgRoundTripNChunk msgs (Positive n) = runIdentity $ do
         iter
     msgs' <- run iter'
     return $ msgs' == msgs
+
+enumPeerMsgActionsRoundTrip :: [PeerMsg] -> Bool
+enumPeerMsgActionsRoundTrip msgs = runST $ do
+    ref <- newSTRef []
+    let
+        iter = joinI $ enumPeerMsg $ foreachI $ \m -> do
+            modifySTRef ref (m:)
+            return True
+    iter' <- enumPure1Chunk (WrapBS $ serializePeerMsgs msgs) iter
+    run iter'
+    val <- readSTRef ref
+    return $ reverse val == msgs
+
+enumPeerMsgActionsRoundTripNoRun :: [PeerMsg] -> Bool
+enumPeerMsgActionsRoundTripNoRun msgs = runST $ do
+    ref <- newSTRef []
+    let
+        iter = joinI $ enumPeerMsg $ foreachI $ \m -> do
+            modifySTRef ref (m:)
+            return True
+    _iter' <- enumPure1Chunk (WrapBS $ serializePeerMsgs msgs) iter
+    val <- readSTRef ref
+    return $ reverse val == msgs
