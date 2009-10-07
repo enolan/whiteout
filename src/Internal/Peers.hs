@@ -16,8 +16,10 @@ import Control.Monad hiding (mapM_)
 import qualified Data.ByteString.Char8 as BC
 import Data.Foldable (mapM_)
 import qualified Data.Map as M
+import Data.Maybe
 import Network.Socket
 import System.IO.Unsafe
+import System.Random
 
 import qualified Internal.Announce as A
 import Internal.Logging
@@ -76,8 +78,14 @@ type WaitThenDoStuff = Session -> TorrentSt -> STM (IO Bool)
 
 peerManager :: Session -> TorrentSt -> IO ()
 peerManager sess torst = do
-    let alternatives = map (flip ($ sess) torst)
-            [cleanup, announce, getNextPeer]
+    let
+        alternatives = map (flip ($ sess) torst) [
+            cleanup,
+            announce,
+            unchoke4,
+            chokeOnTimer,
+            chokeUninterested,
+            getNextPeer]
     exit <- join . atomically . foldr1 orElse $ alternatives
     unless exit $ peerManager sess torst
 
@@ -115,6 +123,70 @@ announce sess torst = do
     go = do
         announceHelper sess torst Nothing
         return False
+
+-- The idea here is to maintain min(4, num_interested_peers) unchoked peers,
+-- rotating which peers are unchoked randomly every 30 seconds. We also reclaim
+-- unchoke slots immediately when peers are uninterested. Obviously, this is an
+-- awful strategy for downloading, but we don't support that at all yet.
+
+getConnectedPeers :: TorrentSt -> STM [ConnectedPeerSt]
+getConnectedPeers torst =
+    catMaybes . map connectedPeerSt . M.elems <$> readTVar (sPeers torst)
+
+unchoke4 :: WaitThenDoStuff
+unchoke4 _sess torst = do
+    connectedPeers <- getConnectedPeers torst
+    numInterestedPeers <- length <$>
+        filterM (readTVar . they'reInterested) connectedPeers
+    numUnchokedPeers <-
+        length <$> filterM ((not <$>) . readTVar . they'reChoked) connectedPeers
+    if (numUnchokedPeers < 4) &&
+       (numUnchokedPeers < numInterestedPeers)
+        then return $ unchokeRandomPeer torst
+        else retry
+
+unchokeRandomPeer :: TorrentSt -> IO Bool
+unchokeRandomPeer torst = do
+    gen <- newStdGen
+    timer <- genericRegisterDelay $ 30 * 1000000
+    atomically $ do
+        interestedPeers <-
+            getConnectedPeers torst >>= filterM (readTVar . they'reInterested)
+        chokedInterestedPeers <-
+            filterM (readTVar . they'reChoked) interestedPeers
+        when (not $ null chokedInterestedPeers) $ do
+            let
+                idxToUnchoke =
+                    fst $ randomR (0, length chokedInterestedPeers - 1) gen
+                peerToUnchoke = chokedInterestedPeers !! idxToUnchoke
+            writeTVar (they'reChoked peerToUnchoke) False
+            writeTVar (chokeTimer peerToUnchoke) timer
+    return False
+
+chokeOnTimer :: WaitThenDoStuff
+chokeOnTimer _sess torst = do
+    peersWithExpiredChokeTimers <-
+        getConnectedPeers torst >>=
+        filterM ((readTVar >=> readTVar) . chokeTimer)
+    if null peersWithExpiredChokeTimers
+        then retry
+        else flip mapM_ peersWithExpiredChokeTimers $ \p -> do
+            timer <- newTVar False
+            writeTVar (chokeTimer p) timer
+            writeTVar (they'reChoked p) True
+    return $ return False
+
+chokeUninterested :: WaitThenDoStuff
+chokeUninterested _sess torst = do
+    connectedPeers <- getConnectedPeers torst
+    unchokedUninterestedPeers <- flip filterM connectedPeers $ \p -> do
+        unchoked <- not <$> readTVar (they'reChoked p)
+        uninterested <- not <$> readTVar (they'reInterested p)
+        return $ unchoked && uninterested
+    if not (null unchokedUninterestedPeers)
+        then mapM_ (flip writeTVar True . they'reChoked) unchokedUninterestedPeers
+        else retry
+    return $ return False
 
 getNextPeer :: WaitThenDoStuff
 getNextPeer sess torst = do

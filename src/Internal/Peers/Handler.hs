@@ -50,7 +50,8 @@ data ConnectedPeerSt = ConnectedPeerSt {
     they'reInterested :: TVar Bool,
     we'reInterested :: TVar Bool,
     they'reChoked :: TVar Bool,
-    we'reChoked :: TVar Bool
+    we'reChoked :: TVar Bool,
+    chokeTimer :: TVar (TVar Bool) -- Used with genericRegisterDelay
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one and a bitfield.
@@ -62,6 +63,7 @@ mkConnectedPeerSt peerId' = ConnectedPeerSt peerId'
     <*> newTVarIO False
     <*> newTVarIO True
     <*> newTVarIO True
+    <*> (newTVarIO False >>= newTVarIO)
 
 -- | Connect to a new peer.
 connectToPeer ::
