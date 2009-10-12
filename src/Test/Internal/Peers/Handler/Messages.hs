@@ -2,7 +2,7 @@
 module Test.Internal.Peers.Handler.Messages (theTests) where
 
 import Control.Applicative
-import Control.Monad (ap, replicateM)
+import Control.Monad (replicateM)
 import Control.Monad.Identity
 import Control.Monad.ST
 import Data.Binary
@@ -74,10 +74,6 @@ instance Arbitrary PeerMsg where
         Piece <$> arbitrary <*> arbitrary <*> arbitrary,
         Cancel <$> arbitrary <*> arbitrary <*> arbitrary
         ]
-
-instance Applicative Gen where
-    pure = return
-    (<*>) = ap
 
 -- Just like peerMsgRoundTrip, but in the context of decodeI
 decodeI1ChunkRoundTrip :: (Arbitrary a, Binary a, Eq a) => a -> Bool
