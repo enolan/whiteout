@@ -148,7 +148,7 @@ unchoke4 _sess torst = do
 unchokeRandomPeer :: TorrentSt -> IO Bool
 unchokeRandomPeer torst = do
     gen <- newStdGen
-    timer <- genericRegisterDelay $ 30 * 1000000
+    timer <- genericRegisterDelay $ (30 * 1000000 :: Integer)
     atomically $ do
         interestedPeers <-
             getConnectedPeers torst >>= filterM (readTVar . they'reInterested)
