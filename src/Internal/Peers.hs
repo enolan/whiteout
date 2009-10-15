@@ -29,11 +29,11 @@ import Internal.Types
 -- | Add a single peer to the queue. Mostly for testing.
 addPeer :: Session -> TorrentSt -> HostAddress -> PortNumber -> STM ()
 addPeer sess torst h p = do
-    maybeLog sess Medium $ BC.concat
+    maybeLog sess Medium $ concat
         ["Adding single peer: ",
-         BC.pack . unsafePerformIO . inet_ntoa $ h,
+         unsafePerformIO . inet_ntoa $ h,
          ":",
-         BC.pack . show $ p
+         show p
         ]
     peers <- readTVar . sPotentialPeers $ torst
     writeTVar (sPotentialPeers torst) $ (h,p) : peers
@@ -43,8 +43,8 @@ addPeer sess torst h p = do
 -- torrent is not 'Running' when this is called.
 stopTorrent :: Session -> TorrentSt -> STM ()
 stopTorrent sess torst = do
-    maybeLog sess Medium . BC.concat $
-        ["Stopping torrent \"", tName . sTorrent $ torst, "\""]
+    maybeLog sess Medium . concat $
+        ["Stopping torrent \"", BC.unpack . tName . sTorrent $ torst, "\""]
     activity <- readTVar . sActivity $ torst
     case activity of
         Running -> writeTVar (sActivity torst) Stopping
@@ -60,8 +60,8 @@ startTorrent sess torst = do
             Stopped -> writeTVar (sActivity torst) Running >> return True
             _ -> return False
     unless goAhead $ throwIO BadState
-    atomically . maybeLog sess Medium . BC.concat $
-        ["Starting torrent: \"", tName . sTorrent $ torst, "\""]
+    atomically . maybeLog sess Medium . concat $
+        ["Starting torrent: \"", BC.unpack . tName . sTorrent $ torst, "\""]
     announceHelper sess torst (Just A.AStarted)
     forkIO $ peerManager sess torst
     return ()
@@ -221,14 +221,15 @@ announceHelper sess torst at = do
         atomically $ do
             writeTVar (sTimeToAnnounce torst) tv
             writeTVar (sPotentialPeers torst) peers
-            maybeLog sess Medium . BC.concat $
+            maybeLog sess Medium . concat $
                 ["Announced successfully, tracker requested interval of ",
-                BC.pack $ show interval, " seconds."]
+                show interval,
+                " seconds."]
     handlers = [Handler $ \(e :: ErrorCall) -> handleEx e,
                 Handler $ \(e :: IOException) -> handleEx e]
     handleEx e = do
-        atomically . maybeLog sess Critical . BC.concat $
-                ["Error in announce : \"", BC.pack $ show e, "\". Waiting 120",
+        atomically . maybeLog sess Critical . concat $
+                ["Error in announce : \"", show e, "\". Waiting 120",
                 " seconds and trying again."]
         -- Guess where I pulled 120 seconds from. Maybe we should do
         -- exponential backoff...

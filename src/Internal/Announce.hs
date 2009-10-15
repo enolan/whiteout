@@ -40,11 +40,11 @@ announce ::
     Session -> TorrentSt -> Maybe AEvent ->
     IO (Integer, [(HostAddress, PortNumber)])
 announce sess torst at = do
-    atomically . maybeLog sess Medium $ BC.concat
+    atomically . maybeLog sess Medium $ concat
         ["Announcing torrent \"",
-        tName . sTorrent $ torst,
+        BC.unpack . tName . sTorrent $ torst,
         "\", with URI \"",
-        BC.pack uri,
+        uri,
         "\""
         ]
     case parseURI uri of

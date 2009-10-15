@@ -27,7 +27,7 @@ data Session = Session {
     -- | Map from infohashes to torrents.
     torrents :: TVar (M.Map ByteString TorrentSt),
     sPeerId :: ByteString,
-    logChan :: Maybe (TChan (LogLevel, ByteString)),
+    logChan :: Maybe (TChan (LogLevel, String)),
     listenPort :: PortNumber,
     listenerThreadId :: ThreadId
     }

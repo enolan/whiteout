@@ -101,8 +101,8 @@ connectToPeer sess torst sockAddr =
                 connect s $ pSockAddr peerSt
                 sendHandshake sess torst s
                 theirHandshake <- getHandshake s
-                maybeLogPeer sess peerSt Debug $ B.concat
-                    ["Got handshake: ", (BC.pack $ show theirHandshake)]
+                maybeLogPeer sess peerSt Debug $ concat
+                    ["Got handshake: ", show theirHandshake]
                 when (hInfoHash theirHandshake /= tInfohash (sTorrent torst)) $
                     error "Wrong infohash in outgoing peer connection!"
                 cPeerSt <- mkConnectedPeerSt $ hPeerId theirHandshake
@@ -122,10 +122,8 @@ connectToPeer sess torst sockAddr =
             ]
         handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
         handleEx :: Show e => e -> IO ()
-        handleEx e = atomically $ maybeLog sess Medium $ B.concat
-            ["Caught exception in peer handler. ",
-             BC.pack . show $ sockAddr,
-             ": ", BC.pack $ show e]
+        handleEx e = atomically $ maybeLog sess Medium $ concat
+            ["Caught exception in peer handler. ", show sockAddr, ": ", show e]
 
 peerListener :: Session -> PortNumber -> IO ()
 peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
@@ -135,26 +133,25 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
     where
     go (s, sockaddr@(SockAddrInet _ _)) =
         let
-            pName = BC.pack $ show sockaddr
+            pName = show sockaddr
             handlers = [
                 Handler (\(e :: IOException) -> handleEx e),
                 Handler (\(e :: ErrorCall) -> handleEx e),
                 Handler (\(e :: AsyncException) -> handleAsync e)
                 ]
-            handleEx e = atomically $ maybeLog sess Medium $ B.concat
-                ["Caught exception in peer handler. ", pName, ": ",
-                 BC.pack $ show e]
+            handleEx e = atomically $ maybeLog sess Medium $ concat
+                ["Caught exception in peer handler. ", pName, ": ", show e]
             handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
             in flip catches handlers $ do
-        atomically . maybeLog sess Debug $ BC.concat [
-            "New incoming connection: ", pName]
+        atomically . maybeLog sess Debug $
+            concat ["New incoming connection: ", pName]
         theirHandshake <- getHandshake s
         cPeerSt <- mkConnectedPeerSt $ hPeerId theirHandshake
         let
             peerSt = PeerSt
                 {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
-        maybeLogPeer sess peerSt Debug $ B.concat
-            ["Got handshake: ", (BC.pack $ show theirHandshake)]
+        maybeLogPeer sess peerSt Debug $ concat
+            ["Got handshake: ", show theirHandshake]
         tid <- myThreadId
         mbtorst <- atomically $ do
             mbtorst' <- M.lookup (hInfoHash theirHandshake) <$>
@@ -220,8 +217,7 @@ handler ::
     Session -> PeerSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> PeerMsg ->
     IO Bool
 handler sess peerSt pieceReqs it = do
-    maybeLogPeer sess peerSt Debug $ B.concat
-        ["Got message: ", BC.pack $ show it]
+    maybeLogPeer sess peerSt Debug $ "Got message: " ++ show it
     case it of
         Request pn off len -> atomically $
             modifyTVar pieceReqs $ S.insert (pn, off, len)
@@ -276,8 +272,8 @@ updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s = do
             mbUpdateChokingMsg =
                 updateMessage Choke Unchoke updateChoking they'reChoked'
             msgsToSend = catMaybes [mbUpdateInterestMsg, mbUpdateChokingMsg]
-        maybeLogPeer sess peerSt Debug $ BC.concat
-            ["Sending message(s): ", BC.pack $ show msgsToSend]
+        maybeLogPeer sess peerSt Debug $
+            "Sending message(s): " ++ show msgsToSend
         mapM_ (sendPeerMsg s) msgsToSend
         return $ Just
             (we'reInterested' `logicalXor` updateInterest,
@@ -363,7 +359,7 @@ recvAll s numBytes = do
           | count == numBytes -> return whatWeGot
           | otherwise -> error "recvAll: the impossible happened"
 
-maybeLogPeer :: Session -> PeerSt -> LogLevel -> B.ByteString -> IO ()
+maybeLogPeer :: Session -> PeerSt -> LogLevel -> String -> IO ()
 maybeLogPeer sess peerSt lvl msg =
-    atomically $ maybeLog sess lvl $ B.concat
-        ["(", BC.pack . show $ pSockAddr peerSt, ") ", msg]
+    atomically $ maybeLog sess lvl $ concat
+        ["(", show $ pSockAddr peerSt, ") ", msg]

@@ -150,7 +150,7 @@ initialize :: Maybe (B.ByteString)
     --
     -- See <http://wiki.theory.org/BitTorrentSpecification#peer_id> for a
     -- directory. If you pass 'Nothing', we'll use WO and the whiteout version.
-    -> Maybe (TChan (LogLevel, B.ByteString))
+    -> Maybe (TChan (LogLevel, String))
     -- ^ Logging channel.
     -> PortNumber
     -- ^ Listen port.
