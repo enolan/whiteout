@@ -82,7 +82,7 @@ connectToPeer sess torst sockAddr =
                         _ -> error
                             "Torrent stopped, new connection dying."
                     wereAlreadyConnected <-
-                        F.any ((==sockAddr) . pSockAddr) <$>
+                        F.any (sameIp sockAddr . pSockAddr) <$>
                             (readTVar . sPeers $ torst)
                     when wereAlreadyConnected $ error
                         "Already connected to this peer in a different thread."
@@ -180,9 +180,11 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
                     peerHandler sess torst peerSt s
     go (_, _) =
         error "Got non-IPv4 SockAddr in peerListener"
-    sameIp (SockAddrInet _ host1) (SockAddrInet _ host2) = host1 == host2
-    sameIp _                      _                      =
-        error "Got non-IPv4 SockAddr in peerListener"
+
+sameIp :: SockAddr -> SockAddr -> Bool
+sameIp (SockAddrInet _ host1) (SockAddrInet _ host2) = host1 == host2
+sameIp _                      _                      =
+    error "Got non-IPv4 SockAddr in sameIp"
 
 modifyTVar :: TVar a -> (a -> a) -> STM ()
 modifyTVar tv f = readTVar tv >>= (writeTVar tv . f)
