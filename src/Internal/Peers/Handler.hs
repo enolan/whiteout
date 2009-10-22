@@ -234,59 +234,45 @@ handler sess peerSt pieceReqs it = do
 peerWriter ::
     Session -> TorrentSt -> PeerSt -> TVar (S.Set (PieceNum, Word32, Word32)) ->
     Socket -> IO ()
-peerWriter sess torst peerSt pieceReqs s = loop False True
-    where
-    -- Interest/choking state as sent.
-    loop we'reInterested' they'reChoked' = do
-        mbNewChokeInterest <- join . atomically $ orElse
-            (updateChokeOrInterest
-                sess
-                peerSt
-                we'reInterested'
-                they'reChoked'
-                s)
-            (sendPiece torst pieceReqs s)
-        case mbNewChokeInterest of
-            Nothing -> loop we'reInterested' they'reChoked'
-            Just interestAndChokeState -> uncurry loop interestAndChokeState
+peerWriter sess torst peerSt pieceReqs s = do
+    -- Track the interest/choke state as visible to the peer.
+    we'reInterested' <- newTVarIO False
+    they'reChoked' <- newTVarIO True
+    forever . join . atomically $ orElse
+        (updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s)
+        (sendPiece torst pieceReqs s)
 
 updateChokeOrInterest ::
-    Session -> PeerSt -> Bool -> Bool -> Socket ->
-    STM (IO (Maybe (Bool, Bool)))
+    Session -> PeerSt -> TVar Bool -> TVar Bool -> Socket ->
+    STM (IO ())
 updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s = do
-    updateInterest <- (/= we'reInterested') <$>
-        readTVar (we'reInterested $ fromConnectedPeerSt peerSt)
-    updateChoking <- (/= they'reChoked') <$>
-        readTVar (they'reChoked $ fromConnectedPeerSt peerSt)
+    oldInterest <- readTVar we'reInterested'
+    newInterest <- readTVar . we'reInterested . fromConnectedPeerSt $ peerSt
+    oldChoking <- readTVar they'reChoked'
+    newChoking <- readTVar . they'reChoked . fromConnectedPeerSt $ peerSt
+    let
+        updateInterest = oldInterest /= newInterest
+        updateChoking = oldChoking /= newChoking
+        mbInterestMsg =
+            updateMessage Interested NotInterested updateInterest oldInterest
+        mbChokingMsg =
+            updateMessage Choke Unchoke updateChoking oldChoking
     unless (updateInterest || updateChoking) retry
-    return $ go updateInterest updateChoking
+    writeTVar we'reInterested' newInterest
+    writeTVar they'reChoked' newChoking
+    return . go . catMaybes $ [mbInterestMsg, mbChokingMsg]
     where
-    go updateInterest updateChoking = do
-        let
-            updateMessage trueMsg falseMsg update prevState = if update
-                then Just $ if prevState then falseMsg else trueMsg
-                else Nothing
-            mbUpdateInterestMsg =
-                updateMessage
-                    Interested NotInterested updateInterest we'reInterested'
-            mbUpdateChokingMsg =
-                updateMessage Choke Unchoke updateChoking they'reChoked'
-            msgsToSend = catMaybes [mbUpdateInterestMsg, mbUpdateChokingMsg]
+    go msgsToSend = do
         maybeLogPeer sess peerSt Debug $
             "Sending message(s): " ++ show msgsToSend
         mapM_ (sendPeerMsg s) msgsToSend
-        return $ Just
-            (we'reInterested' `logicalXor` updateInterest,
-             they'reChoked' `logicalXor` updateChoking)
-    -- There's a 'xor' in Data.Bits, but none for Bool in the libraries. :(
-    logicalXor True True   = False
-    logicalXor True False  = True
-    logicalXor False True  = True
-    logicalXor False False = False
+    updateMessage trueMsg falseMsg update prevState = if update
+        then Just $ if prevState then falseMsg else trueMsg
+        else Nothing
 
 sendPiece ::
     TorrentSt -> TVar (S.Set (PieceNum, Word32, Word32)) -> Socket ->
-    STM (IO (Maybe (Bool, Bool)))
+    STM (IO ())
 sendPiece torst pieceReqs s = do
     pieceReqs' <- readTVar pieceReqs
     case S.minView pieceReqs' of
@@ -300,7 +286,6 @@ sendPiece torst pieceReqs s = do
             (B.take (fromIntegral len) . B.drop (fromIntegral offset)) <$>
             fromJust <$> getPiece torst pn
         sendPeerMsg s $ Piece pn offset dataToSend
-        return Nothing
 
 -- | Run an iteratee over input from a socket. The socket must be connected.
 -- This is equivalent to enumFd modulo the blocking problem. Totally did not
