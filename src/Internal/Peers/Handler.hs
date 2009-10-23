@@ -227,7 +227,6 @@ handler sess peerSt pieceReqs it = do
             modifyTVar pieceReqs $ S.delete (pn, off, len)
         Interested -> atomically $ do
             writeTVar (they'reInterested . fromConnectedPeerSt $ peerSt) True
-            writeTVar (they'reChoked     . fromConnectedPeerSt $ peerSt) False
         NotInterested -> atomically $
             writeTVar (they'reInterested . fromConnectedPeerSt $ peerSt) False
         _ -> return ()
