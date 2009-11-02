@@ -221,8 +221,9 @@ handler ::
 handler sess peerSt pieceReqs it = do
     maybeLogPeer sess peerSt Debug $ "Got message: " ++ show it
     case it of
-        Request pn off len -> atomically $
-            modifyTVar pieceReqs $ S.insert (pn, off, len)
+        Request pn off len -> atomically $ do
+            choked <- readTVar . they'reChoked . fromConnectedPeerSt $ peerSt
+            unless choked $ modifyTVar pieceReqs $ S.insert (pn, off, len)
         Cancel pn off len -> atomically $
             modifyTVar pieceReqs $ S.delete (pn, off, len)
         Interested -> atomically $ do
@@ -240,13 +241,14 @@ peerWriter sess torst peerSt pieceReqs s = do
     we'reInterested' <- newTVarIO False
     they'reChoked' <- newTVarIO True
     forever . join . atomically $ orElse
-        (updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s)
+        (updateChokeOrInterest
+            sess peerSt we'reInterested' they'reChoked' pieceReqs s)
         (sendPiece torst pieceReqs s)
 
 updateChokeOrInterest ::
-    Session -> PeerSt -> TVar Bool -> TVar Bool -> Socket ->
-    STM (IO ())
-updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s = do
+    Session -> PeerSt -> TVar Bool -> TVar Bool ->
+    TVar (S.Set (PieceNum, Word32, Word32)) -> Socket -> STM (IO ())
+updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' pieceReqs s = do
     oldInterest <- readTVar we'reInterested'
     newInterest <- readTVar . we'reInterested . fromConnectedPeerSt $ peerSt
     oldChoking <- readTVar they'reChoked'
@@ -261,6 +263,7 @@ updateChokeOrInterest sess peerSt we'reInterested' they'reChoked' s = do
     unless (updateInterest || updateChoking) retry
     writeTVar we'reInterested' newInterest
     writeTVar they'reChoked' newChoking
+    when newChoking $ writeTVar pieceReqs S.empty
     return . go . catMaybes $ [mbInterestMsg, mbChokingMsg]
     where
     go msgsToSend = do
