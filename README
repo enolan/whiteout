@@ -3,5 +3,4 @@ weather related BitTorrent software names. Okay, so there's actually only two,
 but I think it's funny.
 
 A note on building: this is broken with the version of iteratee currently on
-Hackage. To try this out, you'll need to get the current darcs version and
-apply this patch: http://gist.github.com/210453
+Hackage. To try this out, you'll need to get the current darcs version.
