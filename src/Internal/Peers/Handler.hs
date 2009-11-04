@@ -342,4 +342,4 @@ maybeLogPeer sess peerSt lvl msg =
 logEx :: Session -> String -> IO () -> IO ()
 logEx sess str action = catch action $ \(e :: SomeException) -> do
     atomically . maybeLog sess Low $
-        "Caught exception in " ++ str ++ ": " ++ show e ++ "thread dying."
+        "Caught exception in " ++ str ++ ": " ++ show e ++ ", thread dying."
