@@ -186,8 +186,8 @@ peerHandler sess torst peerSt s = do
             pieceReqs <- newTVarIO S.empty
             writerTid <- forkIO $
                 -- Make sure the reader doesn't get widowed if the writer throws
-                -- an exception.
-                onException
+                -- an exception and that exceptions are logged.
+                logEx sess (show (pSockAddr peerSt) ++ "(writer)") $ onException
                     (peerWriter sess torst peerSt pieceReqs s)
                     (killThread readerTid)
             return (pieceReqs, writerTid))
