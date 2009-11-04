@@ -6,6 +6,8 @@ module Internal.Peers.Handler
     peerListener
     ) where
 
+import Prelude hiding (catch)
+
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
@@ -69,7 +71,7 @@ mkConnectedPeerSt peerId' = ConnectedPeerSt peerId'
 connectToPeer ::
     Session -> TorrentSt -> SockAddr -> IO ()
 connectToPeer sess torst sockAddr =
-    (block . forkIO $ catches go handlers) >> return ()
+    (block . forkIO $ logEx sess (show sockAddr ++ "(read/init)") go) >> return ()
     where
         go = bracket
             (do
@@ -114,16 +116,7 @@ connectToPeer sess torst sockAddr =
                 atomically $ modifyTVar (sPeers torst) (M.insert tid peerSt')
                 -- Overwrites the unconnected PeerSt inserted by getNextPeer.
                 peerHandler sess torst peerSt' s
-                maybeLogPeer sess peerSt' Debug "Disconnecting (normal).")
-        handlers = [
-            Handler (\(e :: IOException) -> handleEx e),
-            Handler (\(e :: ErrorCall) -> handleEx e),
-            Handler (\(e :: AsyncException) -> handleAsync e)
-            ]
-        handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
-        handleEx :: Show e => e -> IO ()
-        handleEx e = atomically $ maybeLog sess Medium $ concat
-            ["Caught exception in peer handler. ", show sockAddr, ": ", show e]
+                maybeLogPeer sess peerSt' Low "Disconnecting (normal).")
 
 peerListener :: Session -> PortNumber -> IO ()
 peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
@@ -132,52 +125,43 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
     forever $ accept ls >>= (forkIO . go)
     where
     go (s, sockaddr@(SockAddrInet _ _)) =
-        let
-            pName = show sockaddr
-            handlers = [
-                Handler (\(e :: IOException) -> handleEx e),
-                Handler (\(e :: ErrorCall) -> handleEx e),
-                Handler (\(e :: AsyncException) -> handleAsync e)
-                ]
-            handleEx e = atomically $ maybeLog sess Medium $ concat
-                ["Caught exception in peer handler. ", pName, ": ", show e]
-            handleAsync e = if e == ThreadKilled then handleEx e else throwIO e
-            in flip catches handlers $ do
-        atomically . maybeLog sess Debug $
-            concat ["New incoming connection: ", pName]
-        theirHandshake <- getHandshake s
-        cPeerSt <- mkConnectedPeerSt $ hPeerId theirHandshake
-        let
-            peerSt = PeerSt
-                {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
-        maybeLogPeer sess peerSt Debug $ concat
-            ["Got handshake: ", show theirHandshake]
-        tid <- myThreadId
-        mbtorst <- atomically $ do
-            mbtorst' <- M.lookup (hInfoHash theirHandshake) <$>
-                readTVar (torrents sess)
-            case mbtorst' of
-                Nothing -> return mbtorst'
-                Just torst -> do
-                    torIsRunning <- (==Running) <$> readTVar (sActivity torst)
-                    peercount <- M.size <$> readTVar (sPeers torst)
-                    wereAlreadyConnected <-
-                        F.any (sameIp sockaddr . pSockAddr) <$>
-                            (readTVar . sPeers $ torst)
-                    if torIsRunning &&
-                       peercount <= 50 &&
-                       not wereAlreadyConnected
-                        then do
-                            modifyTVar (sPeers torst) (M.insert tid peerSt)
-                            return mbtorst'
-                        else return Nothing
-        case mbtorst of
-            Nothing -> error "Refusing connection."
-            Just torst -> flip finally
-                (atomically $ modifyTVar (sPeers torst) (M.delete tid)) $ do
-                    maybeLogPeer sess peerSt Low "Connected."
-                    sendHandshake sess torst s
-                    peerHandler sess torst peerSt s
+        logEx sess (show sockaddr ++ "(read/init)") $ do
+            atomically . maybeLog sess Low $
+                concat ["New incoming connection: ", show sockaddr]
+            theirHandshake <- getHandshake s
+            cPeerSt <- mkConnectedPeerSt $ hPeerId theirHandshake
+            let
+                peerSt = PeerSt
+                    {connectedPeerSt = Just cPeerSt, pSockAddr = sockaddr}
+            maybeLogPeer sess peerSt Debug $ concat
+                ["Got handshake: ", show theirHandshake]
+            tid <- myThreadId
+            mbtorst <- atomically $ do
+                mbtorst' <- M.lookup (hInfoHash theirHandshake) <$>
+                    readTVar (torrents sess)
+                case mbtorst' of
+                    Nothing -> return mbtorst'
+                    Just torst -> do
+                        torIsRunning <- (==Running) <$>
+                            readTVar (sActivity torst)
+                        peercount <- M.size <$> readTVar (sPeers torst)
+                        wereAlreadyConnected <-
+                            F.any (sameIp sockaddr . pSockAddr) <$>
+                                (readTVar . sPeers $ torst)
+                        if torIsRunning &&
+                           peercount <= 50 &&
+                           not wereAlreadyConnected
+                            then do
+                                modifyTVar (sPeers torst) (M.insert tid peerSt)
+                                return mbtorst'
+                            else return Nothing
+            case mbtorst of
+                Nothing -> error "Refusing connection."
+                Just torst -> flip finally
+                    (atomically $ modifyTVar (sPeers torst) (M.delete tid)) $ do
+                        maybeLogPeer sess peerSt Low "Connected."
+                        sendHandshake sess torst s
+                        peerHandler sess torst peerSt s
     go (_, _) =
         error "Got non-IPv4 SockAddr in peerListener"
 
@@ -352,3 +336,10 @@ maybeLogPeer :: Session -> PeerSt -> LogLevel -> String -> IO ()
 maybeLogPeer sess peerSt lvl msg =
     atomically $ maybeLog sess lvl $ concat
         ["(", show $ pSockAddr peerSt, ") ", msg]
+
+-- Used near the beginning of a thread to record exceptions in session-global
+-- log before the thread dies.
+logEx :: Session -> String -> IO () -> IO ()
+logEx sess str action = catch action $ \(e :: SomeException) -> do
+    atomically . maybeLog sess Low $
+        "Caught exception in " ++ str ++ ": " ++ show e ++ "thread dying."
