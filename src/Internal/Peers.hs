@@ -9,6 +9,7 @@ module Internal.Peers
 import Prelude hiding (mapM_)
 
 import Control.Applicative
+import Control.Arrow (second)
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
@@ -85,6 +86,7 @@ peerManager sess torst = do
             unchoke4,
             chokeOnTimer,
             chokeUninterested,
+            disconnectBoring,
             getNextPeer]
     exit <- join . atomically . foldr1 orElse $ alternatives
     unless exit $ peerManager sess torst
@@ -187,6 +189,26 @@ chokeUninterested _sess torst = do
         then mapM_ (flip writeTVar True . they'reChoked) unchokedUninterestedPeers
         else retry
     return $ return False
+
+-- Disconnect any peers that are "boring" where boring is defined as having
+-- been connected for at least 1 second (tune this?) and not having sent
+-- Interested.
+disconnectBoring :: WaitThenDoStuff
+disconnectBoring _sess torst = do
+    peers <- M.assocs <$> readTVar (sPeers torst)
+    let
+        connectedPeers = map (second fromConnectedPeerSt) $
+            filter (isJust . connectedPeerSt . snd) peers
+    potentiallyBoringPeers <-
+        filterM (readTVar . mightBeBoring . snd) connectedPeers
+    when (null potentiallyBoringPeers) retry
+    peerThreadIdsToDisconnect <- fmap (map fst) $
+        flip filterM potentiallyBoringPeers $ \(_, cPeerSt) -> do
+            interested <- readTVar . they'reInterested $ cPeerSt
+            if interested
+                then writeTVar (mightBeBoring cPeerSt) False >> return False
+                else return True
+    return $ (mapM_ killThread peerThreadIdsToDisconnect >> return False)
 
 getNextPeer :: WaitThenDoStuff
 getNextPeer sess torst = do
