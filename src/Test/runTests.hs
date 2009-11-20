@@ -25,7 +25,7 @@ main = do
     case args of
         [] -> defaultMain tests
         ("tf" : rest) -> defaultMainWithArgs tests rest
-        ("seedout" : host : port : []) -> singleseed host port
+        ["seedout", host, port] -> singleseed host port
         ["seedin"] -> seedin
         _ -> putStrLn usage
 
