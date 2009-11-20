@@ -23,7 +23,7 @@ theTests =
 
 verifyGeneric :: FilePath -> FilePath -> Bool -> Assertion
 verifyGeneric torpath datapath expectedResult = do
-    sess <- initialize Nothing Nothing 31337
+    sess <- initialize Nothing Nothing Nothing
     tor <- loadTorrentFromFile torpath
     torst <- addTorrent sess tor datapath
     beginVerifyingTorrent sess torst

@@ -143,7 +143,6 @@ toTorrent benc = do
                 then Just t
                 else Nothing
 
--- This should eventually take more arguments. At least a port to listen on.
 initialize :: Maybe (B.ByteString)
     -- ^ Your client name and version. Must be exactly two characters, followed
     -- by four numbers. E.g. Azureus uses AZ2060.
@@ -152,8 +151,10 @@ initialize :: Maybe (B.ByteString)
     -- directory. If you pass 'Nothing', we'll use WO and the whiteout version.
     -> Maybe (TChan (LogLevel, String))
     -- ^ Logging channel.
-    -> PortNumber
-    -- ^ Listen port.
+    -> Maybe PortNumber
+    -- ^ Listen port. Optional, but strongly reccomended. If you don't allow
+    -- incoming connections, you won't be able to connect to a substantial
+    -- fraction of peers. Really only a Maybe for testing purposes.
     -> IO Session
 initialize name ourLogChan portNum = do
     -- Could use cabal to get our version number here...
@@ -162,8 +163,10 @@ initialize name ourLogChan portNum = do
         torrents' <- newTVar M.empty
         return Session
             {torrents = torrents', sPeerId = peerId, logChan = ourLogChan,
-             listenPort = portNum, listenerThreadId = undefined}
-    tid <- forkIO $ peerListener sess portNum
+             listenPort = fromMaybe 0 portNum, listenerThreadId = undefined}
+    tid <- case portNum of
+        Just pn -> Just <$> (forkIO $ peerListener sess pn)
+        Nothing -> return Nothing
     return $ sess {listenerThreadId = tid}
 
 genPeerId :: B.ByteString -> IO B.ByteString
@@ -178,7 +181,9 @@ genPeerId nameandver = do
 -- undefined.
 close :: Session -> IO ()
 close sess = do
-    killThread $ listenerThreadId sess
+    case listenerThreadId sess of
+        Just tid -> killThread tid
+        Nothing -> return ()
     atomically $ readTVar (torrents sess) >>= mapM_ maybeStopTorrent
     atomically $ do
         torrents' <- M.elems <$> readTVar (torrents sess)

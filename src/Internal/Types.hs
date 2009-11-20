@@ -29,7 +29,7 @@ data Session = Session {
     sPeerId :: ByteString,
     logChan :: Maybe (TChan (LogLevel, String)),
     listenPort :: PortNumber,
-    listenerThreadId :: ThreadId
+    listenerThreadId :: Maybe ThreadId
     }
 
 -- | The state of a torrent.

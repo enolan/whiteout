@@ -58,7 +58,7 @@ initBradSucks :: IO (Session, TorrentSt)
 initBradSucks = do
     logChan <- newTChanIO
     logToConsole logChan
-    sess <- initialize Nothing (Just logChan) 31337
+    sess <- initialize Nothing (Just logChan) (Just 31337)
     tor <- stripTracker <$> loadTorrentFromFile
         "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
     torst <- addTorrent sess tor
