@@ -3,6 +3,7 @@ module Internal.Peers.Handler
     PeerSt(..),
     ConnectedPeerSt(..),
     connectToPeer,
+    fromConnectedPeerSt,
     peerListener
     ) where
 
@@ -53,7 +54,8 @@ data ConnectedPeerSt = ConnectedPeerSt {
     we'reInterested :: TVar Bool,
     they'reChoked :: TVar Bool,
     we'reChoked :: TVar Bool,
-    chokeTimer :: TVar (TVar Bool) -- Used with genericRegisterDelay
+    chokeTimer :: TVar (TVar Bool), -- Used with genericRegisterDelay
+    mightBeBoring :: TVar Bool
 
     -- Later we'll have a TChan of the have messages to send, dupTChan'd from
     -- the global one and a bitfield.
@@ -66,6 +68,7 @@ mkConnectedPeerSt peerId' = ConnectedPeerSt peerId'
     <*> newTVarIO True
     <*> newTVarIO True
     <*> (newTVarIO False >>= newTVarIO)
+    <*> registerDelay 1000000
 
 -- | Connect to a new peer.
 connectToPeer ::
