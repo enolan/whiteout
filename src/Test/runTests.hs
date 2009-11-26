@@ -27,6 +27,7 @@ main = do
         ("tf" : rest) -> defaultMainWithArgs tests rest
         ["seedout", host, port] -> singleseed host port
         ["seedin"] -> seedin
+        ["seedbidi", torpath, datapath] -> seedbidi torpath datapath
         _ -> putStrLn usage
 
 usage :: String
@@ -35,7 +36,8 @@ usage = unlines [
     "  runTests",
     "  runTests tf tfoptions",
     "  runTests seedout host port",
-    "  runTests seedin", "",
+    "  runTests seedin",
+    "  runTests seedbidi torpath datapath", "",
     "The first runs the QC & HUnit tests via test-framework with no options.",
     "",
     "The second does the same but with the arguments after \"tf\" passed to",
@@ -48,17 +50,26 @@ usage = unlines [
     "The fourth starts seeding the same file, but doesn't do any announcing.",
     "You should launch another bt client and manually connect to localhost to",
     "test incoming connections. When we do downloading too this will be much",
-    "more automated."
+    "more automated.",
+    "",
+    "The fifth seeds the given torrent file with the given data, in both",
+    "directions, using the tracker in the torrent. This is the most complete",
+    "test, used for testing behavior in a real live swarm. Listens on port",
+    "31337 ;)"
     ]
+
+initializeLoggedSession :: IO Session
+initializeLoggedSession = do
+    logChan <- newTChanIO
+    logToConsole logChan
+    initialize Nothing (Just logChan) (Just 31337)
 
 stripTracker :: Torrent -> Torrent
 stripTracker tor = tor {tAnnounce = ""}
 
 initBradSucks :: IO (Session, TorrentSt)
 initBradSucks = do
-    logChan <- newTChanIO
-    logToConsole logChan
-    sess <- initialize Nothing (Just logChan) (Just 31337)
+    sess <- initializeLoggedSession
     tor <- stripTracker <$> loadTorrentFromFile
         "test-data/01_-_Brad_Sucks_-_Dropping_out_of_School.mp3.torrent"
     torst <- addTorrent sess tor
@@ -80,4 +91,12 @@ seedin = do
     putStrLn . unlines $ [
         "Listening for incoming connections on port 31337. Ctrl-C when you're",
         "satisfied."]
+    forever $ threadDelay 1000000
+
+seedbidi :: FilePath -> FilePath -> IO ()
+seedbidi torpath datapath = do
+    sess <- initializeLoggedSession
+    tor <- loadTorrentFromFile torpath
+    torst <- addTorrent sess tor datapath
+    startTorrent sess torst
     forever $ threadDelay 1000000
