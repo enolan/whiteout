@@ -127,7 +127,7 @@ peerListener sess p = bracket (socket AF_INET Stream 0) sClose $ \ls -> do
     listen ls 10
     forever $ accept ls >>= (forkIO . go)
     where
-    go (s, sockaddr@(SockAddrInet _ _)) =
+    go (s, sockaddr@(SockAddrInet _ _)) = flip finally (sClose s) $
         logEx sess (show sockaddr ++ "(read/init)") $ do
             atomically . maybeLog sess Low $
                 concat ["New incoming connection: ", show sockaddr]
