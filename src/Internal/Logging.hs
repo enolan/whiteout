@@ -18,6 +18,8 @@ maybeLog sess level msg = case logChan sess of
 -- | Directs the passed logging channel to console.
 logToConsole :: TChan (LogLevel, String) -> IO ()
 logToConsole chan = do
+    -- This isn't redundant if stdout is redirected.
+    hSetBuffering stdout LineBuffering
     forkIO $ forever $
         atomically (readTChan chan) >>= uncurry genLogMsg >>= putStrLn
     return ()
