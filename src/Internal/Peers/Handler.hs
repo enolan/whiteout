@@ -23,13 +23,13 @@ import qualified Data.ByteString.Lazy as L
 import qualified Data.Foldable as F
 import Data.Int (Int64)
 import Data.Iteratee.Base as Iter
-import Data.Iteratee.WrappedByteString
+import Data.Iteratee.IO.Fd (enumFd)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromJust)
 import qualified Data.Set as S
 import Network.Socket hiding (Debug) -- clashes with the LogLevel
-import qualified Network.Socket.ByteString as SB
 import qualified Network.Socket.ByteString.Lazy as SBL
+import System.Posix.Types (Fd(Fd))
 import qualified Text.Show.ByteString as SBS
 
 import Internal.Logging (maybeLog)
@@ -198,7 +198,7 @@ peerHandler sess torst peerSt s = do
         (peerReader . fst)
     where
     peerReader pieceReqs = do
-        iter <- enumSocket s $ joinI $ enumPeerMsg $ foreachI $
+        iter <- enumFd (Fd $ fdSocket s) $ joinI $ enumPeerMsg $ foreachI $
             handler sess peerSt pieceReqs
         run iter
 
@@ -277,22 +277,6 @@ sendPiece torst pieceReqs s = do
             (B.take (fromIntegral len) . B.drop (fromIntegral offset)) <$>
             fromJust <$> getPiece torst pn
         sendPeerMsg s $ Piece pn offset dataToSend
-
--- | Run an iteratee over input from a socket. The socket must be connected.
--- This is equivalent to enumFd modulo the blocking problem. Totally did not
--- realize you could call read() on a socket. Once the blocking issue with
--- enumFd is fixed, this should be deleted.
-enumSocket :: Socket -> EnumeratorGM WrappedByteString Word8 IO a
-enumSocket s iter = do
-    bs <- SB.recv s 4096
-    case B.length bs of
-        0 -> return iter
-        _ -> do
-            igv <- runIter iter (Chunk $ WrapBS bs)
-            case igv of
-                Done x _        -> return . return $ x
-                Cont i Nothing  -> enumSocket s i
-                Cont _ (Just e) -> return $ throwErr e
 
 sendHandshake :: Session -> TorrentSt -> Socket -> IO ()
 sendHandshake sess torst s = SBL.sendAll s $ encode Handshake {
